@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PhishGuard Dashboard — Scan URLs, emails, and websites for phishing threats.">
+    <title>Dashboard — PhishGuard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+</head>
+
+<body>
+    <div class="bg-animation"></div>
+    <div class="grid-overlay"></div>
+
+    <div class="container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <a href="/dashboard" class="navbar-brand">
+                <div class="logo-icon">🛡️</div>
+                <h1>Phish<span class="gradient-text">Guard</span></h1>
+            </a>
+            <div class="navbar-user">
+                <div class="user-info">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-email" id="user-email">user@example.com</div>
+                </div>
+                <div class="user-avatar" id="user-avatar">U</div>
+                <button class="btn btn-sm btn-secondary" id="logout-btn">Logout</button>
+            </div>
+        </nav>
+
+        <!-- Header -->
+        <div class="dashboard-header">
+            <h2>🔍 <span class="gradient-text">Threat Scanner</span></h2>
+            <p>Select a scan type below to analyze potential phishing threats. Each scanner uses heuristic analysis to
+                evaluate risk.</p>
+        </div>
+
+        <!-- Scan Option Cards -->
+        <div class="scan-options-grid">
+            <div class="scan-card" id="card-url">
+                <div class="scan-card-icon cyan">🔗</div>
+                <h3>URL Scanner</h3>
+                <p>Paste any suspicious URL to analyze it for phishing indicators, typosquatting, and malicious
+                    patterns.</p>
+            </div>
+            <div class="scan-card" id="card-email">
+                <div class="scan-card-icon green">📧</div>
+                <h3>Email Scanner</h3>
+                <p>Paste the content of a suspicious email to detect urgency language, personal data requests, and
+                    threat indicators.</p>
+            </div>
+            <div class="scan-card" id="card-website">
+                <div class="scan-card-icon purple">🌐</div>
+                <h3>Website Scanner</h3>
+                <p>Enter a domain name to check its reputation, SSL status, and structural patterns for phishing risk.
+                </p>
+            </div>
+            <div class="scan-card" id="card-bulk">
+                <div class="scan-card-icon orange">📊</div>
+                <h3>Bulk Scanner</h3>
+                <p>Check multiple URLs at once. Paste one URL per line to batch-analyze up to 20 URLs simultaneously.
+                </p>
+            </div>
+        </div>
+
+        <!-- Scan History -->
+        <div class="history-section">
+            <h3>📋 Recent Scans</h3>
+            <div class="history-list" id="history-list">
+                <div class="empty-state" id="empty-history">
+                    <div class="empty-icon">🔍</div>
+                    <p>No scans yet. Choose a scanner above to get started!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Modals -->
+    <!-- URL Scan Modal -->
+    <div class="modal-overlay" id="modal-url">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('url')">&times;</button>
+            <h3>🔗 URL Scanner</h3>
+            <p>Enter a URL to scan for phishing indicators</p>
+            <form id="form-url" onsubmit="submitScan(event, 'url')">
+                <div class="form-group">
+                    <label for="input-url">Target URL</label>
+                    <input type="text" id="input-url" class="form-input" placeholder="https://suspicious-site.com/login"
+                        required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">🔍 Scan URL</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Email Scan Modal -->
+    <div class="modal-overlay" id="modal-email">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('email')">&times;</button>
+            <h3>📧 Email Scanner</h3>
+            <p>Paste the email content to analyze for phishing</p>
+            <form id="form-email" onsubmit="submitScan(event, 'email')">
+                <div class="form-group">
+                    <label for="input-email">Email Content</label>
+                    <textarea id="input-email" class="form-input"
+                        placeholder="Paste the suspicious email content here..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">🔍 Scan Email</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Website Scan Modal -->
+    <div class="modal-overlay" id="modal-website">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('website')">&times;</button>
+            <h3>🌐 Website Scanner</h3>
+            <p>Enter a domain name to check its reputation</p>
+            <form id="form-website" onsubmit="submitScan(event, 'website')">
+                <div class="form-group">
+                    <label for="input-website">Domain Name</label>
+                    <input type="text" id="input-website" class="form-input" placeholder="example.com" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">🔍 Scan Website</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bulk Scan Modal -->
+    <div class="modal-overlay" id="modal-bulk">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal('bulk')">&times;</button>
+            <h3>📊 Bulk Scanner</h3>
+            <p>Enter one URL per line (max 20)</p>
+            <form id="form-bulk" onsubmit="submitBulkScan(event)">
+                <div class="form-group">
+                    <label for="input-bulk">URLs (one per line)</label>
+                    <textarea id="input-bulk" class="form-input"
+                        placeholder="https://site1.com&#10;https://site2.com&#10;https://site3.com" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">🔍 Scan All URLs</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scanning Animation Overlay -->
+    <div class="scanning-overlay" id="scanning-overlay">
+        <div class="scan-spinner">
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="ring"></div>
+            <div class="center-icon">🛡️</div>
+        </div>
+        <div class="scanning-text">Analyzing for threats...</div>
+        <div class="scanning-subtext" id="scanning-subtext">Checking phishing indicators</div>
+    </div>
+
+    <script src="/js/dashboard.js"></script>
+</body>
+
+</html>

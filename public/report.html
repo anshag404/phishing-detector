@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PhishGuard — Threat Analysis Report with safety recommendations.">
+    <title>Scan Report — PhishGuard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+</head>
+
+<body>
+    <div class="bg-animation"></div>
+    <div class="grid-overlay"></div>
+
+    <div class="container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <a href="/dashboard" class="navbar-brand">
+                <div class="logo-icon">🛡️</div>
+                <h1>Phish<span class="gradient-text">Guard</span></h1>
+            </a>
+            <div class="navbar-user">
+                <button class="btn btn-sm btn-secondary" onclick="window.location.href='/dashboard'">← Back to
+                    Dashboard</button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Single Scan Report -->
+    <div class="report-container" id="single-report">
+        <div class="report-header">
+            <h2>🔍 Threat Analysis <span class="gradient-text">Report</span></h2>
+            <div class="report-target" id="report-target">—</div>
+        </div>
+
+        <!-- Gauge -->
+        <div class="gauge-container">
+            <div class="gauge" id="gauge">
+                <svg viewBox="0 0 200 200">
+                    <circle class="gauge-bg" cx="100" cy="100" r="85"></circle>
+                    <circle class="gauge-fill" id="gauge-fill" cx="100" cy="100" r="85" stroke-dasharray="534"
+                        stroke-dashoffset="534"></circle>
+                </svg>
+                <div class="gauge-center">
+                    <div class="gauge-score" id="gauge-score">0</div>
+                    <div class="gauge-label" id="gauge-label">Scanning</div>
+                    <div class="gauge-sublabel">Threat Score</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Factors -->
+        <h3 class="section-title">⚠️ Risk Factors</h3>
+        <div class="factors-list" id="factors-list"></div>
+
+        <!-- Safety Recommendations -->
+        <div class="recommendations-section" id="recommendations-section">
+            <h3 class="section-title">🛡️ Safety Recommendations</h3>
+            <div id="recommendations-list"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="report-actions">
+            <button class="btn btn-primary btn-lg" onclick="window.location.href='/dashboard'">🔍 New Scan</button>
+            <button class="btn btn-secondary btn-lg" onclick="downloadReport()">📄 Download Report</button>
+        </div>
+    </div>
+
+    <!-- Bulk Report -->
+    <div class="report-container hidden" id="bulk-report">
+        <div class="report-header">
+            <h2>📊 Bulk Scan <span class="gradient-text">Results</span></h2>
+        </div>
+
+        <div id="bulk-results-list"></div>
+
+        <div class="report-actions mt-4">
+            <button class="btn btn-primary btn-lg" onclick="window.location.href='/dashboard'">🔍 New Scan</button>
+        </div>
+    </div>
+
+    <script src="/js/report.js"></script>
+</body>
+
+</html>
