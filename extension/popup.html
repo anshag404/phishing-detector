@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="popup">
+        <header>
+            <div class="logo">
+                <span class="shield">🛡️</span>
+                <h1>PhishGuard</h1>
+            </div>
+            <span class="version">v1.0</span>
+        </header>
+
+        <!-- Current Site Status -->
+        <div id="current-scan" class="section">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing current page...</p>
+            </div>
+            <div id="scan-result" style="display:none;">
+                <div class="score-ring" id="score-ring">
+                    <svg viewBox="0 0 120 120">
+                        <circle class="bg" cx="60" cy="60" r="52" />
+                        <circle class="progress" id="score-circle" cx="60" cy="60" r="52" />
+                    </svg>
+                    <div class="score-text">
+                        <span class="score-number" id="score-number">0</span>
+                        <span class="score-label">Threat</span>
+                    </div>
+                </div>
+                <div class="risk-badge" id="risk-badge">Safe</div>
+                <p class="site-url" id="site-url"></p>
+            </div>
+        </div>
+
+        <!-- Factors -->
+        <div id="factors-section" class="section" style="display:none;">
+            <h2>Threat Factors</h2>
+            <div id="factors-list"></div>
+        </div>
+
+        <!-- Recent History -->
+        <div class="section">
+            <h2>Recent Scans</h2>
+            <div id="history-list" class="history-list">
+                <p class="empty">No scans yet</p>
+            </div>
+        </div>
+
+        <footer>
+            <p>Scanning all sites in real-time</p>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
