@@ -98,8 +98,27 @@ function httpsPost(url, body, headers = {}) {
     });
 }
 
+// Known real email providers
+const VALID_EMAIL_DOMAINS = [
+    'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+    'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk', 'yahoo.co.jp', 'ymail.com',
+    'aol.com', 'protonmail.com', 'proton.me', 'icloud.com', 'me.com', 'mac.com',
+    'mail.com', 'email.com', 'zoho.com', 'zohomail.com', 'yandex.com', 'yandex.ru',
+    'gmx.com', 'gmx.net', 'gmx.de', 'tutanota.com', 'tuta.com', 'fastmail.com',
+    'hey.com', 'pm.me', 'mailbox.org', 'posteo.de', 'runbox.com',
+    'rediffmail.com', 'sify.com', 'in.com',
+    'qq.com', '163.com', '126.com', 'sina.com', 'foxmail.com',
+    'naver.com', 'hanmail.net', 'daum.net',
+    'seznam.cz', 'wp.pl', 'o2.pl', 'interia.pl', 'libero.it', 'virgilio.it',
+    'web.de', 't-online.de', 'freenet.de', 'mail.ru', 'rambler.ru', 'bk.ru',
+    'outlook.in', 'live.in', 'hotmail.co.in', 'outlook.co.in',
+    'comcast.net', 'verizon.net', 'att.net', 'sbcglobal.net', 'cox.net',
+    'btinternet.com', 'sky.com', 'shaw.ca', 'rogers.com',
+    'edu', 'ac.in', 'edu.in', 'ac.uk', 'edu.au'
+];
+
 // ============================================================
-// SIGNUP with email/password (validates email domain via MX)
+// SIGNUP with email/password (validates email domain)
 // ============================================================
 router.post('/signup', async (req, res) => {
     try {
@@ -113,6 +132,13 @@ router.post('/signup', async (req, res) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ error: 'Please enter a valid email address' });
+        }
+
+        // Validate email domain is a known real provider
+        const domain = email.split('@')[1].toLowerCase();
+        const isValidDomain = VALID_EMAIL_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
+        if (!isValidDomain) {
+            return res.status(400).json({ error: 'Please use a real email provider (e.g. Gmail, Outlook, Yahoo, etc.)' });
         }
 
         if (password.length < 6) {
