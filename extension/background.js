@@ -215,7 +215,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 });
 
-// Listen for messages from popup
+// Listen for messages from popup and content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_CURRENT_SCAN') {
         chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -226,7 +226,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse(null);
             }
         });
-        return true; // keep channel open for async response
+        return true;
     }
     if (message.type === 'GET_HISTORY') {
         chrome.storage.local.get('scanHistory', (data) => {
@@ -234,6 +234,187 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
     }
+
+    // ---- EMAIL SCANNING ----
+    if (message.type === 'SCAN_EMAIL') {
+        const result = scanEmailContent(message.content);
+        const risk = getRiskLevel(result.score);
+
+        // Save to history
+        const data = chrome.storage.local.get('scanHistory');
+        data.then(d => {
+            const history = d.scanHistory || [];
+            history.unshift({
+                url: `📧 Email (${message.source})`,
+                score: result.score, risk,
+                factors: result.factors,
+                timestamp: new Date().toISOString()
+            });
+            chrome.storage.local.set({ scanHistory: history.slice(0, 100) });
+        });
+
+        // Show notification for threats
+        if (risk === 'average' || risk === 'bad') {
+            showEmailNotification(result.score, risk, message.source);
+        }
+
+        sendResponse({ score: result.score, risk, factors: result.factors });
+        return true;
+    }
 });
 
-console.log('🛡️ PhishGuard Extension loaded');
+// ===============================================================
+// EMAIL PHISHING SCANNER ENGINE
+// ===============================================================
+
+const EMAIL_URGENCY_KEYWORDS = [
+    'urgent', 'immediately', 'suspended', 'unauthorized', 'verify your',
+    'click here', 'act now', 'limited time', 'expire', 'locked',
+    'unusual activity', 'confirm your identity', 'security alert',
+    'your account', 'has been compromised', 'reset your password',
+    'winning', 'congratulations', 'selected', 'prize', 'lottery'
+];
+
+const EMAIL_THREAT_KEYWORDS = [
+    'will be closed', 'will be suspended', 'legal action', 'law enforcement',
+    'criminal', 'terminate', 'compromised', 'hacked', 'breached', 'stolen'
+];
+
+const EMAIL_CTA_KEYWORDS = [
+    'click here', 'click below', 'click the link', 'follow the link',
+    'tap here', 'open this', 'verify now', 'confirm now', 'act immediately'
+];
+
+const PERSONAL_INFO_KEYWORDS = [
+    'social security', 'ssn', 'credit card', 'bank account',
+    'routing number', 'pin number', 'date of birth', "mother's maiden"
+];
+
+function scanEmailContent(content) {
+    const factors = [];
+    let score = 0;
+    const lower = content.toLowerCase();
+
+    // 1. Urgency keywords
+    const foundUrgency = EMAIL_URGENCY_KEYWORDS.filter(kw => lower.includes(kw));
+    if (foundUrgency.length > 0) {
+        const pts = Math.min(foundUrgency.length * 8, 45);
+        factors.push({
+            name: 'Urgency Language',
+            severity: foundUrgency.length > 2 ? 'high' : 'medium',
+            points: pts,
+            description: `Contains: "${foundUrgency.slice(0, 4).join('", "')}"`
+        });
+        score += pts;
+    }
+
+    // 2. Threat language
+    const foundThreats = EMAIL_THREAT_KEYWORDS.filter(kw => lower.includes(kw));
+    if (foundThreats.length > 0) {
+        const pts = Math.min(foundThreats.length * 15, 25);
+        factors.push({
+            name: 'Threatening Language',
+            severity: 'high',
+            points: pts,
+            description: `Contains: "${foundThreats.join('", "')}"`
+        });
+        score += pts;
+    }
+
+    // 3. Call-to-action manipulation
+    const foundCTA = EMAIL_CTA_KEYWORDS.filter(kw => lower.includes(kw));
+    if (foundCTA.length > 0) {
+        factors.push({
+            name: 'Manipulative Call-to-Action',
+            severity: 'high',
+            points: 15,
+            description: 'Uses direct calls to action like "click here"'
+        });
+        score += 15;
+    }
+
+    // 4. Personal info requests
+    const foundPersonal = PERSONAL_INFO_KEYWORDS.filter(kw => lower.includes(kw));
+    if (foundPersonal.length > 0) {
+        factors.push({
+            name: 'Personal Info Request',
+            severity: 'high',
+            points: 25,
+            description: 'Requests sensitive personal information'
+        });
+        score += 25;
+    }
+
+    // 5. Suspicious links in email
+    const urlMatches = content.match(/https?:\/\/[^\s<>"]+/gi) || [];
+    if (urlMatches.length > 0) {
+        let suspiciousUrls = 0;
+        urlMatches.forEach(url => {
+            const urlResult = scanURL(url);
+            if (urlResult.score > 20) suspiciousUrls++;
+        });
+        if (suspiciousUrls > 0) {
+            factors.push({
+                name: 'Suspicious Links',
+                severity: 'high',
+                points: 20,
+                description: `Contains ${suspiciousUrls} suspicious link(s)`
+            });
+            score += 20;
+        }
+    }
+
+    // 6. Generic greetings
+    const genericGreetings = ['dear customer', 'dear user', 'dear sir/madam', 'dear account holder', 'valued customer'];
+    if (genericGreetings.some(g => lower.includes(g))) {
+        factors.push({
+            name: 'Generic Greeting',
+            severity: 'low',
+            points: 10,
+            description: 'Uses generic greeting instead of your name'
+        });
+        score += 10;
+    }
+
+    // 7. Attachment mentions
+    const attachmentWords = ['attachment', 'attached', 'download', '.exe', '.zip', '.scr', '.bat'];
+    if (attachmentWords.some(w => lower.includes(w))) {
+        factors.push({
+            name: 'Suspicious Attachments',
+            severity: 'medium',
+            points: 12,
+            description: 'References file attachments or downloads'
+        });
+        score += 12;
+    }
+
+    if (factors.length === 0) {
+        factors.push({
+            name: 'No Threats Found',
+            severity: 'safe',
+            points: 0,
+            description: 'No phishing indicators detected'
+        });
+    }
+
+    score = Math.max(0, Math.min(100, score));
+    return { score, factors, type: 'email' };
+}
+
+function showEmailNotification(score, risk, source) {
+    const message = risk === 'bad'
+        ? `🚨 PHISHING EMAIL DETECTED in ${source}! Threat score: ${score}/100. Do NOT click any links or download attachments!`
+        : `⚠️ Suspicious email detected in ${source}. Threat score: ${score}/100. Verify the sender before taking any action.`;
+
+    chrome.notifications.create('phishguard-email-' + Date.now(), {
+        type: 'basic',
+        iconUrl: 'icons/icon128.svg',
+        title: risk === 'bad' ? '🛡️ PhishGuard — PHISHING EMAIL!' : '🛡️ PhishGuard — Suspicious Email',
+        message: message,
+        priority: 2,
+        requireInteraction: risk === 'bad'
+    });
+}
+
+console.log('🛡️ PhishGuard Extension loaded — URL + Email scanning active');
+
