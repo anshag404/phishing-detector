@@ -2,3 +2,6 @@ node_modules/
 data.json
 .env
 *.log
+feed_cache/
+phishtank_cache.json
+test-output.txt

@@ -1,76 +1,139 @@
 ﻿============================================================
-≡ƒ¢í∩╕Å  PhishGuard ΓÇö PhishTank Integration Test
+  PhishGuard ΓÇö Threat Feed Pipeline Test
 ============================================================
 
-STEP 1: Loading PhishTank database...
+STEP 1: Defanged URL Normalization
 ----------------------------------------
-[PhishTank] ≡ƒöä Fetching PhishTank database...
-[PhishTank] Fetching: http://data.phishtank.com/data/online-valid.json.gz...
-[PhishTank] HTTP 301 | Content-Type: unknown
-[PhishTank] Redirecting...
-[PhishTank] Fetching: https://data.phishtank.com/data/online-valid.json.gz...
-[PhishTank] HTTP 302 | Content-Type: text/html; charset=UTF-8
-[PhishTank] Redirecting...
-[PhishTank] Fetching: https://cdn.phishtank.com/datadumps/verified_online.json.gz?Expires=1775766330&S...
-[PhishTank] HTTP 200 | Content-Type: application/gzip
-[PhishTank] Downloaded 3038949 bytes
-[PhishTank] Detected gzip data, decompressing...
-[PhishTank] Decompressed to 32696391 bytes
-[PhishTank] Response: 32696391 chars
-[PhishTank] Γ£à Parsed 56657 active phishing entries from 56657 total
-[PhishTank] ≡ƒöì Sample entries:
-  1. allegrolokalnie.net-ogloszenie-nr-3423-smart.club
-  2. allegro.net-ogloszenie-nr-3423-smart.club
-  3. t.co/bc9bh6kscr
-  4. t.co
-  5. allegrolokalnie.pl-09593.click/oferta/xiaomi-15t-pro-malo-uzywany-idealny-stan-512gb
-  6. allegrolokalnie.pl-09593.click
-[PhishTank] ≡ƒÆ╛ Cached 53589 entries
-[PhishTank] Γ£à Database loaded: 53589 entries
+PASS: "hxxp://evil[.]example[.]com/login" -> "http://evil.example.com/login"
+PASS: "hxxps://phish[dot]site[.]tk/verify" -> "https://phish.site.tk/verify"
+PASS: "hXXp://192[.]168[.]1[.]100/steal" -> "http://192.168.1.100/steal"
+PASS: "  "http://sketchy.xyz"  " -> "http://sketchy.xyz"
+PASS: "malware[.]bad[.]com" -> "http://malware.bad.com"
+Defang tests: 5/5 passed
 
-≡ƒôè PhishTank DB Stats:
-   Loaded:     true
-   Entries:    53589
-   Last Fetch: 2026-04-09T20:25:26.227Z
-   Cache Age:  0 minutes
-
-STEP 2: Testing hardcoded URLs with scanner...
+STEP 2: Loading all threat feeds...
 ----------------------------------------
 
-≡ƒö┤ http://paypal-secure-login.tk/verify
-   Score: 75/100 | Risk: BAD
-   PhishTank Match: No
-   Factors: No SSL Certificate, Suspicious Domain Extension, Suspicious Keywords in URL, Possible Typosquatting
+============================================================
+[ThreatFeeds] Loading 4 threat intelligence feeds...
+============================================================
 
-ΓÜá∩╕Å http://account-verify.xyz/signin
-   Score: 45/100 | Risk: AVERAGE
-   PhishTank Match: No
-   Factors: No SSL Certificate, Suspicious Domain Extension, Suspicious Keywords in URL
 
-ΓÜá∩╕Å http://192.168.1.100/bankofamerica/login
-   Score: 45/100 | Risk: AVERAGE
-   PhishTank Match: No
-   Factors: IP-Based URL, No SSL Certificate, Suspicious Keywords in URL
+--- PhishTank Verified Online (phishtank) ---
+[PhishTank Verified Online] FETCH: http://data.phishtank.com/data/online-valid.json.gz
+[PhishTank Verified Online] STATUS: 301 | Content-Type: unknown
+[PhishTank Verified Online] REDIRECT -> following...
+[PhishTank Verified Online] FETCH: https://data.phishtank.com/data/online-valid.json.gz
+[PhishTank Verified Online] STATUS: 302 | Content-Type: text/html; charset=UTF-8
+[PhishTank Verified Online] REDIRECT -> following...
+[PhishTank Verified Online] FETCH: https://cdn.phishtank.com/datadumps/verified_online.json.gz?Expires=1775766907&Signature=UeV10ByPscy...
+[PhishTank Verified Online] STATUS: 200 | Content-Type: application/gzip
+[PhishTank Verified Online] DOWNLOADED: 3038949 bytes
+[PhishTank Verified Online] GZIP detected (magic bytes), decompressing...
+[PhishTank Verified Online] DECOMPRESSED: 32696391 bytes
+[PhishTank Verified Online] PAYLOAD PREVIEW (first 500 chars):
+---START---
+[{"phish_id":9388428,"url":"http:\/\/allegrolokalnie.net-ogloszenie-nr-3423-smart.club","phish_detail_url":"http:\/\/www.phishtank.com\/phish_detail.php?phish_id=9388428","submission_time":"2026-04-09T20:08:37+00:00","verified":"yes","verification_time":"2026-04-09T20:12:30+00:00","online":"yes","details":[],"target":"Allegro"},{"phish_id":9388424,"url":"http:\/\/allegro.net-ogloszenie-nr-3423-smart.club","phish_detail_url":"http:\/\/www.phishtank.com\/phish_detail.php?phish_id=9388424","submiss
+---END---
+[PhishTank Verified Online] Γ£à Parsed 56657 URLs from 56657 JSON entries
+[PhishTank Verified Online] Γ£à Successfully parsed 53593 active URLs.
+[PhishTank Verified Online] Sending first URL: allegrolokalnie.net-ogloszenie-nr-3423-smart.club to detection engine.
 
-Γ£à https://google.com
-   Score: 0/100 | Risk: GOOD
-   PhishTank Match: No
-   Factors: Known Safe Domain, Suspicious Keywords in URL
+--- OpenPhish Community Feed (openphish) ---
+[OpenPhish Community Feed] FETCH: https://openphish.com/feed.txt
+[OpenPhish Community Feed] STATUS: 302 | Content-Type: text/html
+[OpenPhish Community Feed] REDIRECT -> following...
+[OpenPhish Community Feed] FETCH: https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt
+[OpenPhish Community Feed] STATUS: 200 | Content-Type: text/plain; charset=utf-8
+[OpenPhish Community Feed] DOWNLOADED: 15798 bytes
+[OpenPhish Community Feed] PAYLOAD PREVIEW (first 500 chars):
+---START---
+http://docu-share-direct-lnk-5378edjksjhdb.vercel.app/docu-share-download98yhjkfdyidy8idyi.html
+https://pawandholia.in/uiitra2/front/live/new%20hotmail.html
+http://shopee6799.blogspot.com/
+http://www.5mp.eu/fajlok2/tiaew/owa_www.5mp.eu_.html
+https://chantaygiavietnam.com/lang/wap/
+https://chantaygiavietnam.com/lang/
+http://roblox.com.bn/communities/350138577753/Pandesal
+http://onur156.github.io/instagram-phishing-tool
+https://linkurl.pk/UMP-HEXI
+http://bormaxcorreias.com.br/web/mnx/
+http://netfl
+---END---
+[OpenPhish Community Feed] Γ£à Parsed 300 URLs from 301 lines
+[OpenPhish Community Feed] Γ£à Successfully parsed 319 active URLs.
+[OpenPhish Community Feed] Sending first URL: docu-share-direct-lnk-5378edjksjhdb.vercel.app/docu-share-download98yhjkfdyidy8idyi.html to detection engine.
 
-Γ£à https://github.com
-   Score: 0/100 | Risk: GOOD
-   PhishTank Match: No
-   Factors: Known Safe Domain
+--- URLhaus Recent URLs (abuse.ch) (urlhaus_recent) ---
+[URLhaus Recent URLs (abuse.ch)] FETCH: https://urlhaus.abuse.ch/downloads/text_recent/
+[URLhaus Recent URLs (abuse.ch)] STATUS: 200 | Content-Type: text/plain
+[URLhaus Recent URLs (abuse.ch)] DOWNLOADED: 1100673 bytes
+[URLhaus Recent URLs (abuse.ch)] PAYLOAD PREVIEW (first 500 chars):
+---START---
+https://9tdrxs7.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+http://110.37.5.60:34068/i
+http://119.186.206.112:37162/i
+http://42.229.183.96:57623/i
+https://goldgeyse.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+https://etttiinm.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+https://k0ejxai.makemicrophone.in.net/05fe31
+---END---
+[URLhaus Recent URLs (abuse.ch)] Γ£à Parsed 21778 URLs from 21779 lines
+[URLhaus Recent URLs (abuse.ch)] Γ£à Successfully parsed 30680 active URLs.
+[URLhaus Recent URLs (abuse.ch)] Sending first URL: 9tdrxs7.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google to detection engine.
 
-STEP 3: Testing first 5 PhishTank DB entries through scanner...
+--- URLhaus Online URLs (abuse.ch) (urlhaus_online) ---
+[URLhaus Online URLs (abuse.ch)] FETCH: https://urlhaus.abuse.ch/downloads/text_online/
+[URLhaus Online URLs (abuse.ch)] STATUS: 200 | Content-Type: text/plain
+[URLhaus Online URLs (abuse.ch)] DOWNLOADED: 789039 bytes
+[URLhaus Online URLs (abuse.ch)] PAYLOAD PREVIEW (first 500 chars):
+---START---
+http://110.37.5.60:34068/i
+http://119.186.206.112:37162/i
+http://42.229.183.96:57623/i
+https://goldgeyse.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+https://etttiinm.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+https://k0ejxai.makemicrophone.in.net/05fe317c-0981-4de2-bc8a-930d369db441/ck-3d80df5d12cdfe6450a782fc87bf66b444.google
+http://125.47.71.155:39266/bin.sh
+http://96
+---END---
+[URLhaus Online URLs (abuse.ch)] Γ£à Parsed 11722 URLs from 11723 lines
+[URLhaus Online URLs (abuse.ch)] Γ£à Successfully parsed 13391 active URLs.
+[URLhaus Online URLs (abuse.ch)] Sending first URL: 110.37.5.60/i to detection engine.
+[ThreatFeeds] ≡ƒÆ╛ Cached 95480 entries
+
+============================================================
+[ThreatFeeds] Γ£à TOTAL: 95480 unique threat entries loaded from 4 feeds
+============================================================
+
+
+STEP 3: Feed Stats Summary
 ----------------------------------------
-≡ƒö┤ http://allegrolokalnie.net-ogloszenie-nr-3423-smart.club ΓåÆ Score: 70 | Risk: BAD
-≡ƒö┤ http://allegro.net-ogloszenie-nr-3423-smart.club ΓåÆ Score: 70 | Risk: BAD
-≡ƒö┤ http://t.co/bc9bh6kscr ΓåÆ Score: 70 | Risk: BAD
-≡ƒö┤ http://t.co ΓåÆ Score: 70 | Risk: BAD
-≡ƒö┤ http://allegrolokalnie.pl-09593.click/oferta/xiaomi-15t-pro-malo-uzywany-idealny-stan-512gb ΓåÆ Score: 55 | Risk: BAD
+Total Entries: 95480
+Loaded: true
+Last Fetch: 2026-04-09T20:38:48.403Z
 
-≡ƒôê Detection Results: 5/5 flagged as threats
+Per-feed breakdown:
+  [OK] phishtank: 53593 entries
+  [OK] openphish: 319 entries
+  [OK] urlhaus_recent: 30680 entries
+  [OK] urlhaus_online: 13391 entries
+
+STEP 4: Safe URL Verification (should NOT match DB)
+----------------------------------------
+PASS: https://google.com -> clean
+PASS: https://github.com -> clean
+PASS: https://microsoft.com -> clean
+
+STEP 5: Testing 5 threat DB entries through scanner...
+----------------------------------------
+DETECTED: http://allegrolokalnie.net-ogloszenie-nr-3423-smart.club -> Score: 70 | Risk: BAD | ThreatDB: YES
+DETECTED: http://allegro.net-ogloszenie-nr-3423-smart.club -> Score: 70 | Risk: BAD | ThreatDB: YES
+DETECTED: http://t.co -> Score: 70 | Risk: BAD | ThreatDB: YES
+DETECTED: http://allegrolokalnie.pl-09593.click -> Score: 55 | Risk: BAD | ThreatDB: YES
+DETECTED: http://musicoop.cl -> Score: 55 | Risk: BAD | ThreatDB: YES
+
+Detection rate: 5/5 flagged as threats
 
 ============================================================
 Test complete!

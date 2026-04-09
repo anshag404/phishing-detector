@@ -1,90 +1,95 @@
 /**
- * PhishTank Integration Test Script
- * Tests fetching, parsing, and scanning against the PhishTank database.
+ * Threat Feed Pipeline Test
+ * Tests the full ingestion pipeline: fetch → decompress → parse → normalize → detect
  * 
  * Run: node test-phishtank.js
  */
 
-const { loadPhishTankDB, checkPhishTank, getPhishTankStats } = require('./utils/phishtank');
-const { scanURL, getRiskLevel } = require('./utils/scanner');
+const { loadAllFeeds, checkThreatDB, getThreatDBStats, defangToUrl } = require('./utils/phishtank');
 
-// Known phishing test URLs (some may be down, but they should still match DB)
-const TEST_URLS = [
-  'http://paypal-secure-login.tk/verify',
-  'http://account-verify.xyz/signin',
-  'http://192.168.1.100/bankofamerica/login',
-  'https://google.com',  // should be SAFE
-  'https://github.com',  // should be SAFE
+// Defanged URL test cases
+const DEFANG_TESTS = [
+  { input: 'hxxp://evil[.]example[.]com/login',    expected: 'http://evil.example.com/login' },
+  { input: 'hxxps://phish[dot]site[.]tk/verify',   expected: 'https://phish.site.tk/verify' },
+  { input: 'hXXp://192[.]168[.]1[.]100/steal',     expected: 'http://192.168.1.100/steal' },
+  { input: '  "http://sketchy.xyz"  ',              expected: 'http://sketchy.xyz' },
+  { input: 'malware[.]bad[.]com',                   expected: 'http://malware.bad.com' },
 ];
+
+// Safe URLs (should NOT match)
+const SAFE_URLS = ['https://google.com', 'https://github.com', 'https://microsoft.com'];
 
 async function runTest() {
   console.log('='.repeat(60));
-  console.log('🛡️  PhishGuard — PhishTank Integration Test');
+  console.log('  PhishGuard — Threat Feed Pipeline Test');
   console.log('='.repeat(60));
   console.log('');
 
-  // Step 1: Load PhishTank database
-  console.log('STEP 1: Loading PhishTank database...');
+  // STEP 1: Test defanging logic
+  console.log('STEP 1: Defanged URL Normalization');
   console.log('-'.repeat(40));
-  await loadPhishTankDB();
-
-  const stats = getPhishTankStats();
-  console.log('');
-  console.log('📊 PhishTank DB Stats:');
-  console.log(`   Loaded:     ${stats.loaded}`);
-  console.log(`   Entries:    ${stats.entries}`);
-  console.log(`   Last Fetch: ${stats.lastFetch}`);
-  console.log(`   Cache Age:  ${stats.cacheAge}`);
-  console.log('');
-
-  // Step 2: Test hardcoded URLs
-  console.log('STEP 2: Testing hardcoded URLs with scanner...');
-  console.log('-'.repeat(40));
-  
-  for (const url of TEST_URLS) {
-    const result = scanURL(url);
-    const risk = getRiskLevel(result.score);
-    const phishTankMatch = checkPhishTank(url);
-    const icon = risk === 'good' ? '✅' : risk === 'average' ? '⚠️' : '🔴';
-    
-    console.log(`\n${icon} ${url}`);
-    console.log(`   Score: ${result.score}/100 | Risk: ${risk.toUpperCase()}`);
-    console.log(`   PhishTank Match: ${phishTankMatch ? `YES (${phishTankMatch.matchType})` : 'No'}`);
-    console.log(`   Factors: ${result.factors.map(f => f.name).join(', ')}`);
+  let defangPass = 0;
+  for (const t of DEFANG_TESTS) {
+    const result = defangToUrl(t.input);
+    const pass = result === t.expected;
+    if (pass) defangPass++;
+    console.log(`${pass ? 'PASS' : 'FAIL'}: "${t.input}" -> "${result}"${pass ? '' : ` (expected: "${t.expected}")`}`);
   }
+  console.log(`Defang tests: ${defangPass}/${DEFANG_TESTS.length} passed\n`);
 
-  // Step 3: If PhishTank DB loaded, test first 5 entries from the DB itself
-  if (stats.loaded && stats.entries > 0) {
-    console.log('');
-    console.log('STEP 3: Testing first 5 PhishTank DB entries through scanner...');
+  // STEP 2: Load all feeds (this exercises the full pipeline)
+  console.log('STEP 2: Loading all threat feeds...');
+  console.log('-'.repeat(40));
+  await loadAllFeeds();
+
+  // STEP 3: Print stats
+  const stats = getThreatDBStats();
+  console.log('\nSTEP 3: Feed Stats Summary');
+  console.log('-'.repeat(40));
+  console.log(`Total Entries: ${stats.entries}`);
+  console.log(`Loaded: ${stats.loaded}`);
+  console.log(`Last Fetch: ${stats.lastFetch}`);
+  console.log('');
+  console.log('Per-feed breakdown:');
+  for (const [feedId, info] of Object.entries(stats.feeds)) {
+    const icon = info.status === 'ok' ? 'OK' : (info.status === 'error' ? 'ERR' : 'EMPTY');
+    console.log(`  [${icon}] ${feedId}: ${info.count} entries${info.error ? ` (${info.error.substring(0, 60)})` : ''}`);
+  }
+  console.log('');
+
+  // STEP 4: Test safe URLs (should NOT match)
+  console.log('STEP 4: Safe URL Verification (should NOT match DB)');
+  console.log('-'.repeat(40));
+  for (const url of SAFE_URLS) {
+    const match = checkThreatDB(url);
+    console.log(`${match ? 'FAIL (false positive!)' : 'PASS'}: ${url} -> ${match ? 'MATCHED' : 'clean'}`);
+  }
+  console.log('');
+
+  // STEP 5: Test detection against DB entries
+  if (stats.loaded) {
+    console.log('STEP 5: Testing 5 threat DB entries through scanner...');
     console.log('-'.repeat(40));
-
-    // We need to read a few entries from the cache to test
-    const fs = require('fs');
-    const path = require('path');
-    const cacheFile = path.join(__dirname, 'phishtank_cache.json');
-    
-    if (fs.existsSync(cacheFile)) {
-      const cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      // The cache urls are hostnames — let's test a few
-      const sampleUrls = cache.urls.slice(0, 5).map(u => 'http://' + u);
-      
+    const { scanURL, getRiskLevel } = require('./utils/scanner');
+    // Load a few entries from the cache
+    const cacheFile = require('path').join(__dirname, 'feed_cache', 'threat_db.json');
+    if (require('fs').existsSync(cacheFile)) {
+      const cache = JSON.parse(require('fs').readFileSync(cacheFile, 'utf8'));
+      // Filter to non-path entries (bare hostnames) for cleaner test
+      const hostnames = cache.urls.filter(u => !u.includes('/')).slice(0, 5);
       let detected = 0;
-      for (const url of sampleUrls) {
+      for (const host of hostnames) {
+        const url = 'http://' + host;
         const result = scanURL(url);
         const risk = getRiskLevel(result.score);
+        const hasThreatFactor = result.factors.some(f => f.name.includes('Verified Threat') || f.name.includes('PhishTank'));
         if (risk !== 'good') detected++;
-        
-        const icon = risk === 'good' ? '✅' : risk === 'average' ? '⚠️' : '🔴';
-        console.log(`${icon} ${url} → Score: ${result.score} | Risk: ${risk.toUpperCase()}`);
+        console.log(`${risk !== 'good' ? 'DETECTED' : 'MISSED'}: ${url} -> Score: ${result.score} | Risk: ${risk.toUpperCase()} | ThreatDB: ${hasThreatFactor ? 'YES' : 'no'}`);
       }
-
-      console.log('');
-      console.log(`📈 Detection Results: ${detected}/${sampleUrls.length} flagged as threats`);
+      console.log(`\nDetection rate: ${detected}/${hostnames.length} flagged as threats`);
     }
   } else {
-    console.log('');
-    console.log('⚠️ STEP 3 SKIPPED: PhishTank DB not loaded — check network/logs above');
+    console.log('STEP 5 SKIPPED: No feeds loaded\n');
   }
 
   console.log('');
@@ -94,6 +99,6 @@ async function runTest() {
 }
 
 runTest().catch(err => {
-  console.error('Test failed:', err);
+  console.error('Test crashed:', err);
   process.exit(1);
 });

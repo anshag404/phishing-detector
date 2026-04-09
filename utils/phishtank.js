@@ -1,9 +1,13 @@
 /**
- * PhishTank Integration Module
- * Fetches the PhishTank database and checks URLs against known phishing entries.
+ * Threat Feed Aggregator — Hardened Data Ingestion Pipeline
  * 
- * PhishTank provides a free JSON feed of verified phishing URLs.
- * API docs: https://phishtank.org/developer_info.php
+ * Pulls phishing URLs from multiple external threat feeds, normalizes them,
+ * and feeds them into the detection engine. Handles:
+ *   - Multiple feed formats (JSON, CSV, plain text, defanged URLs)
+ *   - HTTP error handling (403, 429, Cloudflare blocks)
+ *   - Gzip decompression (magic byte detection)
+ *   - Defanged URL normalization (hxxp://, [.], etc.)
+ *   - Payload inspection and verbose debug logging
  */
 
 const https = require('https');
@@ -12,310 +16,489 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const CACHE_FILE = path.join(__dirname, '..', 'phishtank_cache.json');
-const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_DIR = path.join(__dirname, '..', 'feed_cache');
+const CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-// PhishTank download URL (JSON format, gzipped)
-// Using the community feed — no API key required for the online CSV/JSON
-const PHISHTANK_URL = 'http://data.phishtank.com/data/online-valid.json.gz';
-// Fallback: uncompressed
-const PHISHTANK_URL_FALLBACK = 'http://data.phishtank.com/data/online-valid.json';
+// ================================================================
+// FEED REGISTRY — all external threat intelligence sources
+// ================================================================
+const FEEDS = [
+  {
+    id: 'phishtank',
+    name: 'PhishTank Verified Online',
+    url: 'http://data.phishtank.com/data/online-valid.json.gz',
+    fallbackUrl: 'http://data.phishtank.com/data/online-valid.json',
+    format: 'json',
+    jsonPath: null,        // root is array
+    urlField: 'url',       // field name containing the URL
+    filterFn: (entry) => true, // accept all (already filtered as "online-valid")
+  },
+  {
+    id: 'openphish',
+    name: 'OpenPhish Community Feed',
+    url: 'https://openphish.com/feed.txt',
+    format: 'text',        // one URL per line
+  },
+  {
+    id: 'urlhaus_recent',
+    name: 'URLhaus Recent URLs (abuse.ch)',
+    url: 'https://urlhaus.abuse.ch/downloads/text_recent/',
+    format: 'text',
+  },
+  {
+    id: 'urlhaus_online',
+    name: 'URLhaus Online URLs (abuse.ch)',
+    url: 'https://urlhaus.abuse.ch/downloads/text_online/',
+    format: 'text',
+  },
 
-let phishTankDB = new Set();
-let lastFetchTime = 0;
-let isFetching = false;
+];
+
+// ================================================================
+// GLOBAL THREAT DB
+// ================================================================
+let threatDB = new Set();
+let feedStats = {};
+let lastLoadTime = 0;
+let isLoading = false;
+
+// ================================================================
+// HARDENED HTTP FETCHER
+// ================================================================
 
 /**
- * Make an HTTP/HTTPS GET request with proper headers
- * Returns raw Buffer body (handles gzip decompression automatically)
+ * Fetch a URL with full error handling, redirect support, gzip detection.
+ * Uses a realistic browser User-Agent to avoid bot blocks.
  */
-function fetchURL(url) {
+function fetchFeed(url, feedName) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
     const options = {
       headers: {
-        'User-Agent': 'PhishGuard/1.0 (Phishing Detection System; +https://github.com/anshag404/phishing-detector)',
-        'Accept': 'application/json, application/gzip, */*'
+        // Realistic browser User-Agent to bypass bot filters
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,text/csv,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'identity',   // don't ask for gzip encoding (we handle file-level gzip ourselves)
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
       },
-      timeout: 60000
+      timeout: 45000,
     };
 
-    console.log(`[PhishTank] Fetching: ${url.substring(0, 80)}...`);
+    console.log(`[${feedName}] FETCH: ${url.substring(0, 100)}${url.length > 100 ? '...' : ''}`);
 
     const req = client.get(url, options, (res) => {
-      console.log(`[PhishTank] HTTP ${res.statusCode} | Content-Type: ${res.headers['content-type'] || 'unknown'}`);
+      const status = res.statusCode;
+      const contentType = res.headers['content-type'] || 'unknown';
 
-      // Handle redirects
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        console.log(`[PhishTank] Redirecting...`);
-        return fetchURL(res.headers.location).then(resolve).catch(reject);
+      console.log(`[${feedName}] STATUS: ${status} | Content-Type: ${contentType}`);
+
+      // ---- EXPLICIT STATUS CODE HANDLING ----
+      if (status >= 300 && status < 400 && res.headers.location) {
+        console.log(`[${feedName}] REDIRECT -> following...`);
+        res.resume(); // drain response
+        return fetchFeed(res.headers.location, feedName).then(resolve).catch(reject);
       }
 
-      if (res.statusCode !== 200) {
-        return reject(new Error(`HTTP ${res.statusCode} from PhishTank`));
+      if (status === 403) {
+        res.resume();
+        return reject(new Error(`❌ 403 FORBIDDEN — ${feedName} is blocking our request. The server rejected our User-Agent or IP.`));
       }
 
-      // Collect raw binary data
+      if (status === 429) {
+        res.resume();
+        return reject(new Error(`❌ 429 TOO MANY REQUESTS — ${feedName} rate-limited us. Try again later.`));
+      }
+
+      if (status === 503) {
+        res.resume();
+        return reject(new Error(`❌ 503 SERVICE UNAVAILABLE — ${feedName} may be behind Cloudflare or under maintenance.`));
+      }
+
+      if (status !== 200) {
+        res.resume();
+        return reject(new Error(`❌ HTTP ${status} — unexpected status from ${feedName}`));
+      }
+
+      // ---- COLLECT RAW BINARY DATA ----
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
         let rawBuffer = Buffer.concat(chunks);
-        console.log(`[PhishTank] Downloaded ${rawBuffer.length} bytes`);
+        console.log(`[${feedName}] DOWNLOADED: ${rawBuffer.length} bytes`);
 
-        // Check if it's gzip compressed (magic bytes: 1f 8b)
+        // ---- GZIP DETECTION BY MAGIC BYTES (0x1f 0x8b) ----
         if (rawBuffer.length > 2 && rawBuffer[0] === 0x1f && rawBuffer[1] === 0x8b) {
-          console.log(`[PhishTank] Detected gzip data, decompressing...`);
+          console.log(`[${feedName}] GZIP detected (magic bytes), decompressing...`);
           try {
             rawBuffer = zlib.gunzipSync(rawBuffer);
-            console.log(`[PhishTank] Decompressed to ${rawBuffer.length} bytes`);
+            console.log(`[${feedName}] DECOMPRESSED: ${rawBuffer.length} bytes`);
           } catch (err) {
-            console.log(`[PhishTank] Gzip decompress failed: ${err.message}`);
-            return reject(err);
+            return reject(new Error(`Gzip decompression failed: ${err.message}`));
           }
         }
 
         const body = rawBuffer.toString('utf8');
-        console.log(`[PhishTank] Response: ${body.length} chars`);
-        resolve({ statusCode: res.statusCode, body });
+
+        // ---- RAW PAYLOAD INSPECTION (first 500 chars) ----
+        console.log(`[${feedName}] PAYLOAD PREVIEW (first 500 chars):`);
+        console.log(`---START---`);
+        console.log(body.substring(0, 500));
+        console.log(`---END---`);
+
+        // ---- CHECK FOR CLOUDFLARE / CAPTCHA HTML BLOCK ----
+        if (body.includes('Checking your browser') || body.includes('cf-browser-verification') || body.includes('Just a moment...')) {
+          return reject(new Error(`❌ CLOUDFLARE BLOCK — ${feedName} returned a Cloudflare CAPTCHA page, not data.`));
+        }
+
+        if (body.includes('<html') && !body.includes('"url"') && body.length < 5000) {
+          console.log(`[${feedName}] ⚠️ WARNING: Response looks like HTML, not data. Possible error page.`);
+        }
+
+        resolve({ body, contentType });
       });
       res.on('error', reject);
     });
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Request timed out after 60s'));
+      reject(new Error(`❌ TIMEOUT — ${feedName} did not respond within 45 seconds.`));
     });
 
-    req.on('error', reject);
+    req.on('error', (err) => {
+      reject(new Error(`❌ NETWORK ERROR — ${feedName}: ${err.message}`));
+    });
   });
 }
 
+// ================================================================
+// URL DEFANGING / NORMALIZATION
+// ================================================================
+
 /**
- * Parse PhishTank JSON data and extract active phishing URLs
+ * Convert defanged URLs back to usable format and normalize.
+ * Handles: hxxp://, hXXp://, [.], [dot], [:]
  */
-function parsePhishTankData(jsonString) {
-  const urls = new Set();
+function defangToUrl(raw) {
+  let url = raw.trim();
 
+  // Remove surrounding quotes, brackets, angle brackets
+  url = url.replace(/^["'<\[]+|["'>\]]+$/g, '');
+
+  // Defanged protocol: hxxp:// → http://, hxxps:// → https://
+  url = url.replace(/^hxxps?:\/\//i, (match) => {
+    return match.toLowerCase().replace('hxxps', 'https').replace('hxxp', 'http');
+  });
+
+  // Defanged dots: [.] or [dot] → .
+  url = url.replace(/\[dot\]/gi, '.').replace(/\[\.\]/g, '.');
+
+  // Defanged colon: [:] → :
+  url = url.replace(/\[:\]/g, ':');
+
+  // Defanged @: [@] → @
+  url = url.replace(/\[@\]/g, '@');
+
+  // Strip trailing whitespace, slashes
+  url = url.replace(/\s+$/, '');
+
+  // Ensure protocol
+  if (url && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('//')) {
+    url = 'http://' + url;
+  }
+
+  return url;
+}
+
+// ================================================================
+// PARSERS (JSON, CSV, TEXT)
+// ================================================================
+
+const HOSTING_PLATFORMS = [
+  'google.com', 'sites.google.com', 'docs.google.com', 'forms.gle',
+  'wixstudio.com', 'wixsite.com', 'wix.com',
+  'framer.app', 'webflow.io', 'squarespace.com',
+  'github.com', 'github.io', 'netlify.app', 'vercel.app', 'herokuapp.com',
+  'blogspot.com', 'wordpress.com', 'weebly.com',
+  'firebase.app', 'firebaseapp.com',
+  'azurewebsites.net', 'cloudfront.net', 'amazonaws.com'
+];
+
+/**
+ * Extract hostname + path from a URL, add to the Set.
+ * Returns true if a valid entry was added.
+ */
+function addUrlToSet(rawUrl, urlSet) {
   try {
-    const data = JSON.parse(jsonString);
+    const cleaned = defangToUrl(rawUrl);
+    if (!cleaned || cleaned.length < 8) return false;
 
-    if (!Array.isArray(data)) {
-      console.log(`[PhishTank] ⚠️ Unexpected data format: ${typeof data}`);
-      // May be wrapped in an object
-      if (data && data.data && Array.isArray(data.data)) {
-        console.log(`[PhishTank] Found data.data array`);
-        return parsePhishTankEntries(data.data);
-      }
-      return urls;
+    const parsed = new URL(cleaned);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!hostname || hostname.length < 3) return false;
+
+    const pathPart = parsed.pathname.replace(/\/+$/, '');
+
+    // Store full path
+    if (pathPart && pathPart !== '') {
+      urlSet.add(hostname + pathPart);
     }
 
-    return parsePhishTankEntries(data);
-  } catch (err) {
-    console.error(`[PhishTank] ❌ JSON parse error: ${err.message}`);
-    console.log(`[PhishTank] First 200 chars of response: ${jsonString.substring(0, 200)}`);
-    return urls;
+    // Store bare hostname only for non-platform domains
+    const isHosting = HOSTING_PLATFORMS.some(h => hostname === h || hostname.endsWith('.' + h));
+    if (!isHosting) {
+      urlSet.add(hostname);
+    }
+
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
-function parsePhishTankEntries(entries) {
+/**
+ * Parse JSON feed
+ */
+function parseJSON(body, feed) {
   const urls = new Set();
-  let validCount = 0;
-
-  for (const entry of entries) {
-    // PhishTank JSON format has 'url' field
-    // It may also have 'phish_detail_url', 'verified', 'online'
-    const phishUrl = entry.url || entry.phish_url || entry.URL;
-    if (!phishUrl) continue;
-
-    // Only include verified/online entries
-    const isVerified = entry.verified === 'yes' || entry.verified === true || entry.verified === 'y';
-    const isOnline = entry.online === 'yes' || entry.online === true || entry.online === 'y' || !entry.hasOwnProperty('online');
-
-    if (isVerified || isOnline || !entry.hasOwnProperty('verified')) {
-      try {
-        let normalized = phishUrl.toLowerCase().trim();
-        if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-          normalized = 'http://' + normalized;
-        }
-        const parsed = new URL(normalized);
-        const hostname = parsed.hostname;
-        const pathPart = parsed.pathname.replace(/\/+$/, '');
-
-        // Always store full path for precise matching
-        if (pathPart && pathPart !== '') {
-          urls.add(hostname + pathPart);
-        }
-
-        // Only store bare hostname if it's NOT a well-known hosting platform
-        // (phishing pages are often hosted on legitimate services)
-        const hostingPlatforms = [
-          'google.com', 'sites.google.com', 'docs.google.com', 'forms.gle',
-          'wixstudio.com', 'wixsite.com', 'wix.com',
-          'framer.app', 'webflow.io', 'squarespace.com',
-          'github.io', 'netlify.app', 'vercel.app', 'herokuapp.com',
-          'blogspot.com', 'wordpress.com', 'weebly.com',
-          'firebase.app', 'firebaseapp.com',
-          'azurewebsites.net', 'cloudfront.net', 'amazonaws.com'
-        ];
-        const isHostingPlatform = hostingPlatforms.some(h => hostname === h || hostname.endsWith('.' + h));
-
-        if (!isHostingPlatform) {
-          urls.add(hostname);
-        }
-
-        validCount++;
-      } catch (e) {
-        // Skip malformed URLs
-      }
-    }
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e) {
+    console.log(`[${feed.name}] ❌ JSON PARSE ERROR: ${e.message}`);
+    return urls;
   }
 
-  console.log(`[PhishTank] ✅ Parsed ${validCount} active phishing entries from ${entries.length} total`);
+  let entries = parsed;
+  if (feed.jsonPath) {
+    entries = feed.jsonPath.split('.').reduce((o, k) => o && o[k], parsed);
+  }
+  if (!Array.isArray(entries)) {
+    if (entries && entries.data && Array.isArray(entries.data)) entries = entries.data;
+    else { console.log(`[${feed.name}] ⚠️ JSON is not an array`); return urls; }
+  }
 
-  // Log first 3 URLs for verification
-  const sample = [...urls].slice(0, 6);
-  console.log(`[PhishTank] 🔍 Sample entries:`);
-  sample.forEach((u, i) => console.log(`  ${i + 1}. ${u}`));
+  let added = 0;
+  for (const entry of entries) {
+    if (feed.filterFn && !feed.filterFn(entry)) continue;
+    const rawUrl = entry[feed.urlField || 'url'] || entry.phish_url || entry.URL || entry.link;
+    if (rawUrl && addUrlToSet(rawUrl, urls)) added++;
+  }
 
+  console.log(`[${feed.name}] ✅ Parsed ${added} URLs from ${entries.length} JSON entries`);
   return urls;
 }
 
 /**
- * Load from cache if fresh enough
+ * Parse plain text feed (one URL per line)
  */
-function loadCache() {
-  try {
-    if (fs.existsSync(CACHE_FILE)) {
-      const stat = fs.statSync(CACHE_FILE);
-      const age = Date.now() - stat.mtimeMs;
+function parseText(body, feed) {
+  const urls = new Set();
+  const lines = body.split('\n');
+  let added = 0;
 
-      if (age < CACHE_MAX_AGE_MS) {
-        const cached = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-        if (cached.urls && Array.isArray(cached.urls)) {
-          console.log(`[PhishTank] 📦 Loaded ${cached.urls.length} entries from cache (${Math.round(age / 60000)}m old)`);
-          return new Set(cached.urls);
-        }
-      } else {
-        console.log(`[PhishTank] ⏰ Cache expired (${Math.round(age / 3600000)}h old)`);
-      }
-    }
-  } catch (err) {
-    console.log(`[PhishTank] Cache read error: ${err.message}`);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
+    if (addUrlToSet(trimmed, urls)) added++;
   }
-  return null;
+
+  console.log(`[${feed.name}] ✅ Parsed ${added} URLs from ${lines.length} lines`);
+  return urls;
 }
 
 /**
- * Save to cache
+ * Parse CSV feed
  */
-function saveCache(urlSet) {
-  try {
-    const data = { urls: [...urlSet], timestamp: Date.now(), count: urlSet.size };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(data), 'utf8');
-    console.log(`[PhishTank] 💾 Cached ${urlSet.size} entries`);
-  } catch (err) {
-    console.log(`[PhishTank] Cache write error: ${err.message}`);
+function parseCSV(body, feed) {
+  const urls = new Set();
+  const lines = body.split('\n');
+  let added = 0;
+  const colIdx = feed.urlColumn || 0;
+  const start = feed.skipHeader ? 1 : 0;
+
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('#')) continue;
+
+    // Simple CSV split (handles quoted fields)
+    const cols = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g);
+    if (!cols || cols.length <= colIdx) continue;
+
+    let rawUrl = cols[colIdx].replace(/^["']+|["']+$/g, '').trim();
+    if (addUrlToSet(rawUrl, urls)) added++;
   }
+
+  console.log(`[${feed.name}] ✅ Parsed ${added} URLs from ${lines.length - start} CSV rows`);
+  return urls;
 }
 
-/**
- * Fetch and load the PhishTank database
- */
-async function loadPhishTankDB() {
-  if (isFetching) {
-    console.log(`[PhishTank] Already fetching, skipping...`);
+// ================================================================
+// MAIN: LOAD ALL FEEDS
+// ================================================================
+
+async function loadAllFeeds() {
+  if (isLoading) {
+    console.log(`[ThreatFeeds] Already loading, skipping...`);
     return;
   }
 
   // Try cache first
-  const cached = loadCache();
+  const cached = loadFeedCache();
   if (cached) {
-    phishTankDB = cached;
-    lastFetchTime = Date.now();
+    threatDB = cached;
+    lastLoadTime = Date.now();
     return;
   }
 
-  isFetching = true;
-  console.log(`[PhishTank] 🔄 Fetching PhishTank database...`);
+  isLoading = true;
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[ThreatFeeds] Loading ${FEEDS.length} threat intelligence feeds...`);
+  console.log(`${'='.repeat(60)}\n`);
 
-  try {
-    // Try gzipped first
-    let response;
+  const allUrls = new Set();
+
+  for (const feed of FEEDS) {
+    console.log(`\n--- ${feed.name} (${feed.id}) ---`);
     try {
-      response = await fetchURL(PHISHTANK_URL);
+      let response;
+      try {
+        response = await fetchFeed(feed.url, feed.name);
+      } catch (err) {
+        if (feed.fallbackUrl) {
+          console.log(`[${feed.name}] Primary failed, trying fallback...`);
+          response = await fetchFeed(feed.fallbackUrl, feed.name);
+        } else {
+          throw err;
+        }
+      }
+
+      if (response.body.length < 50) {
+        console.log(`[${feed.name}] ⚠️ Response too short (${response.body.length} bytes). Skipping.`);
+        feedStats[feed.id] = { status: 'empty', count: 0 };
+        continue;
+      }
+
+      // Parse based on format
+      let urls;
+      switch (feed.format) {
+        case 'json':  urls = parseJSON(response.body, feed); break;
+        case 'csv':   urls = parseCSV(response.body, feed); break;
+        case 'text':
+        default:      urls = parseText(response.body, feed); break;
+      }
+
+      // ---- PIPELINE VERIFICATION LOG ----
+      const sample = [...urls].slice(0, 3);
+      if (urls.size > 0) {
+        console.log(`[${feed.name}] ✅ Successfully parsed ${urls.size} active URLs.`);
+        console.log(`[${feed.name}] Sending first URL: ${sample[0]} to detection engine.`);
+      } else {
+        console.log(`[${feed.name}] ⚠️ 0 URLs parsed — check format/response above.`);
+      }
+
+      // Merge into global DB
+      for (const u of urls) allUrls.add(u);
+
+      feedStats[feed.id] = { status: 'ok', count: urls.size };
     } catch (err) {
-      console.log(`[PhishTank] Gzip fetch failed (${err.message}), trying uncompressed...`);
-      response = await fetchURL(PHISHTANK_URL_FALLBACK);
+      console.error(`[${feed.name}] ${err.message}`);
+      feedStats[feed.id] = { status: 'error', error: err.message, count: 0 };
     }
-
-    if (response.body.length < 100) {
-      console.log(`[PhishTank] ⚠️ Response too short (${response.body.length} chars). Possibly blocked.`);
-      console.log(`[PhishTank] Body preview: ${response.body.substring(0, 200)}`);
-      isFetching = false;
-      return;
-    }
-
-    const urls = parsePhishTankData(response.body);
-
-    if (urls.size > 0) {
-      phishTankDB = urls;
-      lastFetchTime = Date.now();
-      saveCache(urls);
-      console.log(`[PhishTank] ✅ Database loaded: ${urls.size} entries`);
-    } else {
-      console.log(`[PhishTank] ⚠️ 0 entries parsed — check data format`);
-    }
-  } catch (err) {
-    console.error(`[PhishTank] ❌ Fetch failed: ${err.message}`);
   }
 
-  isFetching = false;
+  if (allUrls.size > 0) {
+    threatDB = allUrls;
+    lastLoadTime = Date.now();
+    saveFeedCache(allUrls);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`[ThreatFeeds] ✅ TOTAL: ${allUrls.size} unique threat entries loaded from ${FEEDS.length} feeds`);
+    console.log(`${'='.repeat(60)}\n`);
+  } else {
+    console.log(`[ThreatFeeds] ⚠️ WARNING: 0 total entries loaded across all feeds`);
+  }
+
+  isLoading = false;
 }
 
-/**
- * Check if a URL is in the PhishTank database
- * @returns {object|null} - Match info if found, null if clean
- */
-function checkPhishTank(url) {
-  if (phishTankDB.size === 0) return null;
+// ================================================================
+// CACHE
+// ================================================================
 
+function loadFeedCache() {
   try {
-    let normalized = url.toLowerCase().trim();
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-      normalized = 'http://' + normalized;
+    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const cacheFile = path.join(CACHE_DIR, 'threat_db.json');
+    if (fs.existsSync(cacheFile)) {
+      const age = Date.now() - fs.statSync(cacheFile).mtimeMs;
+      if (age < CACHE_MAX_AGE_MS) {
+        const data = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        if (data.urls && Array.isArray(data.urls)) {
+          console.log(`[ThreatFeeds] 📦 Loaded ${data.urls.length} entries from cache (${Math.round(age / 60000)}m old)`);
+          feedStats = data.feedStats || {};
+          return new Set(data.urls);
+        }
+      }
     }
+  } catch (e) { /* cache miss */ }
+  return null;
+}
+
+function saveFeedCache(urlSet) {
+  try {
+    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const cacheFile = path.join(CACHE_DIR, 'threat_db.json');
+    fs.writeFileSync(cacheFile, JSON.stringify({
+      urls: [...urlSet], feedStats, timestamp: Date.now(), count: urlSet.size
+    }), 'utf8');
+    console.log(`[ThreatFeeds] 💾 Cached ${urlSet.size} entries`);
+  } catch (e) {
+    console.log(`[ThreatFeeds] Cache write error: ${e.message}`);
+  }
+}
+
+// ================================================================
+// LOOKUP
+// ================================================================
+
+function checkThreatDB(url) {
+  if (threatDB.size === 0) return null;
+  try {
+    let normalized = defangToUrl(url).toLowerCase().trim();
+    if (!normalized.startsWith('http')) normalized = 'http://' + normalized;
     const parsed = new URL(normalized);
     const hostname = parsed.hostname;
     const fullPath = hostname + parsed.pathname.replace(/\/+$/, '');
 
-    // Check exact path match first, then hostname
-    if (phishTankDB.has(fullPath)) {
-      return { matched: true, matchType: 'exact_path', target: fullPath };
-    }
-    if (phishTankDB.has(hostname)) {
-      return { matched: true, matchType: 'domain', target: hostname };
-    }
-  } catch (e) {
-    // Invalid URL
-  }
-
+    if (threatDB.has(fullPath)) return { matched: true, matchType: 'exact_path', target: fullPath };
+    if (threatDB.has(hostname)) return { matched: true, matchType: 'domain', target: hostname };
+  } catch (e) { /* invalid URL */ }
   return null;
 }
 
-/**
- * Get PhishTank DB stats
- */
-function getPhishTankStats() {
+function getThreatDBStats() {
   return {
-    loaded: phishTankDB.size > 0,
-    entries: phishTankDB.size,
-    lastFetch: lastFetchTime ? new Date(lastFetchTime).toISOString() : 'never',
-    cacheAge: lastFetchTime ? Math.round((Date.now() - lastFetchTime) / 60000) + ' minutes' : 'N/A'
+    loaded: threatDB.size > 0,
+    entries: threatDB.size,
+    feeds: feedStats,
+    lastFetch: lastLoadTime ? new Date(lastLoadTime).toISOString() : 'never',
   };
 }
 
+// ================================================================
+// BACKWARD COMPATIBILITY — keep old API working
+// ================================================================
+
 module.exports = {
-  loadPhishTankDB,
-  checkPhishTank,
-  getPhishTankStats
+  // New multi-feed API
+  loadAllFeeds,
+  checkThreatDB,
+  getThreatDBStats,
+  defangToUrl,
+  // Legacy aliases (so scanner.js and server.js keep working)
+  loadPhishTankDB: loadAllFeeds,
+  checkPhishTank: checkThreatDB,
+  getPhishTankStats: getThreatDBStats,
 };
