@@ -212,7 +212,3 @@ This project is licensed under the MIT License.
 **Ansh Agrawal** — [@anshag404](https://github.com/anshag404)
 
 ---
-
-<p align="center">
-  Built with ❤️ for a safer internet
-</p>
