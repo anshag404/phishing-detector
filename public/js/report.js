@@ -25,7 +25,7 @@ function renderSingleReport(data) {
 
     // Set gauge class
     const gauge = document.getElementById('gauge');
-    gauge.classList.remove('score-good', 'score-average', 'score-bad');
+    gauge.classList.remove('score-safe', 'score-low', 'score-medium', 'score-high', 'score-critical');
     gauge.classList.add(`score-${riskLevel}`);
 
     // Animate gauge

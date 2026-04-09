@@ -934,17 +934,27 @@ textarea.form-input {
     white-space: nowrap;
 }
 
-.badge-good {
+.badge-safe {
     background: rgba(0, 255, 136, 0.12);
     color: var(--accent-green);
 }
 
-.badge-average {
+.badge-low {
+    background: rgba(33, 150, 243, 0.12);
+    color: #2196f3;
+}
+
+.badge-medium {
     background: rgba(245, 158, 11, 0.12);
     color: var(--accent-orange);
 }
 
-.badge-bad {
+.badge-high {
+    background: rgba(255, 152, 0, 0.12);
+    color: #ff9800;
+}
+
+.badge-critical {
     background: rgba(239, 68, 68, 0.12);
     color: var(--danger);
 }
@@ -1070,39 +1080,63 @@ textarea.form-input {
     margin-top: 2px;
 }
 
-.score-good .gauge-fill {
+.score-safe .gauge-fill {
     stroke: var(--accent-green);
 }
 
-.score-good .gauge-score {
+.score-safe .gauge-score {
     color: var(--accent-green);
 }
 
-.score-good .gauge-label {
+.score-safe .gauge-label {
     color: var(--accent-green);
 }
 
-.score-average .gauge-fill {
+.score-low .gauge-fill {
+    stroke: #2196f3;
+}
+
+.score-low .gauge-score {
+    color: #2196f3;
+}
+
+.score-low .gauge-label {
+    color: #2196f3;
+}
+
+.score-medium .gauge-fill {
     stroke: var(--accent-orange);
 }
 
-.score-average .gauge-score {
+.score-medium .gauge-score {
     color: var(--accent-orange);
 }
 
-.score-average .gauge-label {
+.score-medium .gauge-label {
     color: var(--accent-orange);
 }
 
-.score-bad .gauge-fill {
+.score-high .gauge-fill {
+    stroke: #ff9800;
+}
+
+.score-high .gauge-score {
+    color: #ff9800;
+}
+
+.score-high .gauge-label {
+    color: #ff9800;
+}
+
+.score-critical .gauge-fill {
     stroke: var(--danger);
 }
 
-.score-bad .gauge-score {
+.score-critical .gauge-score {
     color: var(--danger);
 }
 
-.score-bad .gauge-label {
+.score-critical .gauge-label {
     color: var(--danger);
 }
 
@@ -1148,9 +1182,14 @@ textarea.form-input {
     margin-top: 2px;
 }
 
-.severity-high {
+.severity-critical {
     background: rgba(239, 68, 68, 0.15);
     color: var(--danger);
+}
+
+.severity-high {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
 }
 
 .severity-medium {
