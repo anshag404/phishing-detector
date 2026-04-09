@@ -27,8 +27,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const offset = circumference - (scan.score / 100) * circumference;
 
             let color;
-            if (scan.risk === 'good') color = '#00e676';
-            else if (scan.risk === 'average') color = '#ffc107';
+            if (scan.risk === 'safe') color = '#00e676';
+            else if (scan.risk === 'low') color = '#2196f3';
+            else if (scan.risk === 'medium') color = '#ffc107';
+            else if (scan.risk === 'high') color = '#ff9800';
             else color = '#ff1744';
 
             scoreCircle.style.stroke = color;
@@ -45,7 +47,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, 30);
 
             // Risk badge
-            riskBadge.textContent = scan.risk === 'good' ? '✅ Safe' : scan.risk === 'average' ? '⚠️ Caution' : '🚨 Dangerous';
+            const badgeLabels = {
+                safe: '✅ Safe', low: '🟢 Low Risk', medium: '⚠️ Caution',
+                high: '🔶 High Risk', critical: '🚨 Critical'
+            };
+            riskBadge.textContent = badgeLabels[scan.risk] || scan.risk;
             riskBadge.className = 'risk-badge ' + scan.risk;
 
             // Factors

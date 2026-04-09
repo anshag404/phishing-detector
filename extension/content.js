@@ -10,16 +10,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const existing = document.getElementById('phishguard-banner');
     if (existing) existing.remove();
 
-    if (message.risk === 'good') return;
+    // Only show banner for medium and above
+    if (message.risk === 'safe' || message.risk === 'low') return;
 
     const banner = document.createElement('div');
     banner.id = 'phishguard-banner';
-    const isDanger = message.risk === 'bad';
+    
+    const colors = {
+      medium:   { bg: 'linear-gradient(135deg, #f9a825, #f57f17)', icon: '⚠️', label: 'Caution', msg: 'Proceed with caution — verify before entering data.' },
+      high:     { bg: 'linear-gradient(135deg, #ff6d00, #e65100)', icon: '🔶', label: 'HIGH RISK', msg: 'This site has strong phishing indicators. Do NOT enter personal info!' },
+      critical: { bg: 'linear-gradient(135deg, #d32f2f, #b71c1c)', icon: '🚨', label: 'CRITICAL THREAT', msg: 'CONFIRMED phishing/malware site! Leave immediately!' }
+    };
+    const c = colors[message.risk] || colors.medium;
 
     banner.innerHTML = `
       <div style="
         position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647;
-        background: ${isDanger ? 'linear-gradient(135deg, #d32f2f, #b71c1c)' : 'linear-gradient(135deg, #f57c00, #e65100)'};
+        background: ${c.bg};
         color: white; padding: 12px 20px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px; display: flex; align-items: center; justify-content: space-between;
@@ -27,11 +34,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         animation: phishguard-slide 0.3s ease-out;
       ">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 20px;">${isDanger ? '🚨' : '⚠️'}</span>
+          <span style="font-size: 20px;">${c.icon}</span>
           <div>
-            <strong>PhishGuard ${isDanger ? 'DANGER' : 'Warning'}:</strong>
+            <strong>PhishGuard ${c.label}:</strong>
             This site has a threat score of <strong>${message.score}/100</strong>.
-            ${isDanger ? 'Do NOT enter any personal information!' : 'Proceed with caution.'}
+            ${c.msg}
           </div>
         </div>
         <button onclick="this.parentElement.parentElement.remove()" style="
@@ -157,18 +164,24 @@ function scanEmailContent(content) {
     content: content,
     source: isGmail ? 'Gmail' : isOutlook ? 'Outlook' : 'Yahoo Mail'
   }, (response) => {
-    if (response && (response.risk === 'average' || response.risk === 'bad')) {
+    if (response && (response.risk === 'medium' || response.risk === 'high' || response.risk === 'critical')) {
       showEmailWarning(response);
     }
   });
 }
 
 function showEmailWarning(result) {
-  // Remove existing email warning
   const existing = document.getElementById('phishguard-email-warning');
   if (existing) existing.remove();
 
-  const isDanger = result.risk === 'bad';
+  const isCritical = result.risk === 'critical';
+  const isHigh = result.risk === 'high';
+  const isDanger = isCritical || isHigh;
+  const borderColor = isCritical ? '#ff1744' : isHigh ? '#ff9800' : '#ffc107';
+  const bgGrad = isCritical ? 'linear-gradient(135deg, #1a0000, #2d0000)' : isHigh ? 'linear-gradient(135deg, #1a0f00, #2d1a00)' : 'linear-gradient(135deg, #1a1200, #2d1f00)';
+  const levelLabel = isCritical ? 'Phishing Email Detected!' : isHigh ? 'High-Risk Email' : 'Suspicious Email';
+  const levelIcon = isCritical ? '🚨' : isHigh ? '🔶' : '⚠️';
+
   const warning = document.createElement('div');
   warning.id = 'phishguard-email-warning';
 
@@ -176,8 +189,8 @@ function showEmailWarning(result) {
     <div style="
       position: fixed; bottom: 20px; right: 20px; z-index: 2147483647;
       width: 380px; max-width: calc(100vw - 40px);
-      background: ${isDanger ? 'linear-gradient(135deg, #1a0000, #2d0000)' : 'linear-gradient(135deg, #1a1200, #2d1f00)'};
-      border: 2px solid ${isDanger ? '#ff1744' : '#ffc107'};
+      background: ${bgGrad};
+      border: 2px solid ${borderColor};
       border-radius: 16px;
       padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -193,10 +206,10 @@ function showEmailWarning(result) {
       </style>
 
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-        <span style="font-size: 28px;">${isDanger ? '🚨' : '⚠️'}</span>
+        <span style="font-size: 28px;">${levelIcon}</span>
         <div>
-          <div style="font-size: 16px; font-weight: 700; color: ${isDanger ? '#ff1744' : '#ffc107'};">
-            ${isDanger ? 'Phishing Email Detected!' : 'Suspicious Email'}
+          <div style="font-size: 16px; font-weight: 700; color: ${borderColor};">
+            ${levelLabel}
           </div>
           <div style="font-size: 11px; color: #999;">🛡️ PhishGuard Email Scanner</div>
         </div>
@@ -210,7 +223,7 @@ function showEmailWarning(result) {
         background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px;
         margin-bottom: 12px; text-align: center;
       ">
-        <div style="font-size: 36px; font-weight: 800; color: ${isDanger ? '#ff1744' : '#ffc107'};">
+        <div style="font-size: 36px; font-weight: 800; color: ${borderColor};">
           ${result.score}<span style="font-size: 16px; color: #888;">/100</span>
         </div>
         <div style="font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px;">
@@ -227,7 +240,7 @@ function showEmailWarning(result) {
           ">
             <span style="
               width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-              background: ${f.severity === 'high' ? '#ff1744' : f.severity === 'medium' ? '#ffc107' : '#2196f3'};
+              background: ${f.severity === 'critical' ? '#ff1744' : f.severity === 'high' ? '#ff9800' : f.severity === 'medium' ? '#ffc107' : '#2196f3'};
             "></span>
             <span style="flex:1;">${f.name}</span>
             <span style="color: #888; font-size: 11px;">+${f.points}</span>
@@ -249,7 +262,7 @@ function showEmailWarning(result) {
 
   document.documentElement.appendChild(warning);
 
-  // Auto-dismiss after 15 seconds for average, stay for bad
+  // Auto-dismiss after 15 seconds for medium, stay for high/critical
   if (!isDanger) {
     setTimeout(() => {
       const el = document.getElementById('phishguard-email-warning');

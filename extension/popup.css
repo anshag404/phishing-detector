@@ -133,19 +133,31 @@ h1 {
     margin-bottom: 8px;
 }
 
-.risk-badge.good {
+.risk-badge.safe {
     background: rgba(0, 230, 118, 0.15);
     color: #00e676;
     border: 1px solid rgba(0, 230, 118, 0.3);
 }
 
-.risk-badge.average {
+.risk-badge.low {
+    background: rgba(33, 150, 243, 0.15);
+    color: #2196f3;
+    border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.risk-badge.medium {
     background: rgba(255, 193, 7, 0.15);
     color: #ffc107;
     border: 1px solid rgba(255, 193, 7, 0.3);
 }
 
-.risk-badge.bad {
+.risk-badge.high {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.risk-badge.critical {
     background: rgba(255, 23, 68, 0.15);
     color: #ff1744;
     border: 1px solid rgba(255, 23, 68, 0.3);
@@ -207,8 +219,12 @@ h1 {
     flex-shrink: 0;
 }
 
-.factor-dot.high {
+.factor-dot.critical {
     background: #ff1744;
+}
+
+.factor-dot.high {
+    background: #ff9800;
 }
 
 .factor-dot.medium {
@@ -268,15 +284,23 @@ h1 {
     flex-shrink: 0;
 }
 
-.history-dot.good {
+.history-dot.safe {
     background: #00e676;
 }
 
-.history-dot.average {
+.history-dot.low {
+    background: #2196f3;
+}
+
+.history-dot.medium {
     background: #ffc107;
 }
 
-.history-dot.bad {
+.history-dot.high {
+    background: #ff9800;
+}
+
+.history-dot.critical {
     background: #ff1744;
 }
 
@@ -293,15 +317,23 @@ h1 {
     flex-shrink: 0;
 }
 
-.history-score.good {
+.history-score.safe {
     color: #00e676;
 }
 
-.history-score.average {
+.history-score.low {
+    color: #2196f3;
+}
+
+.history-score.medium {
     color: #ffc107;
 }
 
-.history-score.bad {
+.history-score.high {
+    color: #ff9800;
+}
+
+.history-score.critical {
     color: #ff1744;
 }
 

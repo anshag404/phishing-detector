@@ -20,7 +20,7 @@ function renderSingleReport(data) {
     document.getElementById('report-target').textContent = data.target || 'Unknown';
 
     // Determine risk level
-    const riskLevel = data.riskLevel || data.risk_level || 'good';
+    const riskLevel = data.riskLevel || data.risk_level || 'safe';
     const score = data.score || 0;
 
     // Set gauge class
@@ -51,9 +51,11 @@ function animateGauge(targetScore, riskLevel) {
 
     // Labels
     const labels = {
-        good: 'SAFE',
-        average: 'SUSPICIOUS',
-        bad: 'DANGEROUS'
+        safe: 'SAFE',
+        low: 'LOW RISK',
+        medium: 'CAUTION',
+        high: 'HIGH RISK',
+        critical: 'CRITICAL'
     };
 
     // Animate number counting
@@ -163,9 +165,10 @@ function renderBulkReport(data) {
     }
 
     data.results.forEach(result => {
-        const riskLevel = result.riskLevel || 'good';
+        const riskLevel = result.riskLevel || 'safe';
         const badgeClass = `badge-${riskLevel}`;
-        const scoreColor = riskLevel === 'good' ? 'var(--accent-green)' : riskLevel === 'average' ? 'var(--accent-orange)' : 'var(--danger)';
+        const colorMap = { safe: 'var(--accent-green)', low: '#2196f3', medium: 'var(--accent-orange)', high: '#ff9800', critical: 'var(--danger)' };
+        const scoreColor = colorMap[riskLevel] || 'var(--accent-green)';
 
         const card = document.createElement('div');
         card.className = 'glass-card';
@@ -204,7 +207,7 @@ function downloadReport() {
     if (!reportData) return;
 
     const riskLevel = reportData.riskLevel || reportData.risk_level || 'unknown';
-    const labels = { good: 'SAFE', average: 'SUSPICIOUS', bad: 'DANGEROUS' };
+    const labels = { safe: 'SAFE', low: 'LOW RISK', medium: 'CAUTION', high: 'HIGH RISK', critical: 'CRITICAL' };
 
     let text = `╔══════════════════════════════════════════╗\n`;
     text += `║     PhishGuard — Threat Analysis Report   ║\n`;

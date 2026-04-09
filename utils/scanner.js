@@ -293,9 +293,11 @@ function scanWebsite(domain) {
  * Get risk level based on score
  */
 function getRiskLevel(score) {
-    if (score <= 15) return 'good';     // Clean — no meaningful indicators
-    if (score <= 40) return 'average';  // Suspicious — 2+ weak signals or 1 strong signal
-    return 'bad';                       // Dangerous — confirmed threat or multiple strong indicators
+    if (score <= 10) return 'safe';       // Clean — no indicators
+    if (score <= 25) return 'low';        // 1-2 weak signals — probably fine
+    if (score <= 50) return 'medium';     // Strong heuristic — be careful
+    if (score <= 75) return 'high';       // Multiple strong signals — likely threat
+    return 'critical';                    // Confirmed threat — do NOT interact
 }
 
 /**

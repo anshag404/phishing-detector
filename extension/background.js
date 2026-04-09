@@ -129,9 +129,11 @@ function scanURL(url) {
 }
 
 function getRiskLevel(score) {
-    if (score <= 15) return 'good';
-    if (score <= 40) return 'average';
-    return 'bad';
+    if (score <= 10) return 'safe';
+    if (score <= 25) return 'low';
+    if (score <= 50) return 'medium';
+    if (score <= 75) return 'high';
+    return 'critical';
 }
 
 // ---- Scan History (stored in chrome.storage) ----
@@ -150,10 +152,14 @@ async function saveScanResult(url, result) {
 function updateBadge(tabId, score) {
     const risk = getRiskLevel(score);
     let color, text;
-    if (risk === 'good') {
+    if (risk === 'safe') {
         color = '#00e676'; text = '✓';
-    } else if (risk === 'average') {
+    } else if (risk === 'low') {
+        color = '#2196f3'; text = 'L';
+    } else if (risk === 'medium') {
         color = '#ffc107'; text = '⚠';
+    } else if (risk === 'high') {
+        color = '#ff9800'; text = '!';
     } else {
         color = '#ff1744'; text = '⛔';
     }
@@ -163,21 +169,29 @@ function updateBadge(tabId, score) {
 
 // ---- Notifications ----
 function showThreatNotification(url, score, risk) {
+    // Only notify for medium and above
+    if (risk === 'safe' || risk === 'low') return;
+    
     const hostname = new URL(url).hostname;
-    let message, iconPath;
-    if (risk === 'bad') {
-        message = `🚨 DANGER! "${hostname}" scored ${score}/100 threat level. This site shows strong phishing indicators. Do NOT enter any personal information!`;
+    let message, title;
+    if (risk === 'critical') {
+        title = '🛡️ PhishGuard — CRITICAL THREAT!';
+        message = `🚨 CONFIRMED THREAT! "${hostname}" (score: ${score}/100) is a verified phishing/malware site. Do NOT enter any information!`;
+    } else if (risk === 'high') {
+        title = '🛡️ PhishGuard — High Risk!';
+        message = `⚠️ HIGH RISK: "${hostname}" (score: ${score}/100) shows strong phishing indicators. Proceed with extreme caution.`;
     } else {
-        message = `⚠️ CAUTION: "${hostname}" scored ${score}/100 threat level. Some suspicious indicators detected. Proceed with care.`;
+        title = '🛡️ PhishGuard — Caution';
+        message = `⚠️ CAUTION: "${hostname}" (score: ${score}/100) has suspicious characteristics. Verify before entering any data.`;
     }
 
     chrome.notifications.create('phishguard-' + Date.now(), {
         type: 'basic',
         iconUrl: 'icons/icon128.svg',
-        title: risk === 'bad' ? '🛡️ PhishGuard — DANGER!' : '🛡️ PhishGuard — Warning',
+        title: title,
         message: message,
-        priority: risk === 'bad' ? 2 : 1,
-        requireInteraction: risk === 'bad'
+        priority: risk === 'critical' ? 2 : 1,
+        requireInteraction: risk === 'critical' || risk === 'high'
     });
 }
 
@@ -203,8 +217,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             }
         });
 
-        // Show notification for average and bad
-        if (risk === 'average' || risk === 'bad') {
+        // Show notification for medium, high, and critical
+        if (risk === 'medium' || risk === 'high' || risk === 'critical') {
             showThreatNotification(tab.url, result.score, risk);
         }
 
@@ -253,8 +267,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             chrome.storage.local.set({ scanHistory: history.slice(0, 100) });
         });
 
-        // Show notification for threats
-        if (risk === 'average' || risk === 'bad') {
+        // Show notification for medium, high, critical
+        if (risk === 'medium' || risk === 'high' || risk === 'critical') {
             showEmailNotification(result.score, risk, message.source);
         }
 
@@ -402,17 +416,25 @@ function scanEmailContent(content) {
 }
 
 function showEmailNotification(score, risk, source) {
-    const message = risk === 'bad'
-        ? `🚨 PHISHING EMAIL DETECTED in ${source}! Threat score: ${score}/100. Do NOT click any links or download attachments!`
-        : `⚠️ Suspicious email detected in ${source}. Threat score: ${score}/100. Verify the sender before taking any action.`;
+    let message, title;
+    if (risk === 'critical') {
+        title = '🛡️ PhishGuard — PHISHING EMAIL!';
+        message = `🚨 PHISHING EMAIL DETECTED in ${source}! Threat score: ${score}/100. Do NOT click any links or download attachments!`;
+    } else if (risk === 'high') {
+        title = '🛡️ PhishGuard — High-Risk Email';
+        message = `🔶 HIGH-RISK email detected in ${source}. Threat score: ${score}/100. Verify the sender before taking any action.`;
+    } else {
+        title = '🛡️ PhishGuard — Suspicious Email';
+        message = `⚠️ Suspicious email detected in ${source}. Threat score: ${score}/100. Be cautious with links.`;
+    }
 
     chrome.notifications.create('phishguard-email-' + Date.now(), {
         type: 'basic',
         iconUrl: 'icons/icon128.svg',
-        title: risk === 'bad' ? '🛡️ PhishGuard — PHISHING EMAIL!' : '🛡️ PhishGuard — Suspicious Email',
+        title: title,
         message: message,
-        priority: 2,
-        requireInteraction: risk === 'bad'
+        priority: risk === 'critical' ? 2 : 1,
+        requireInteraction: risk === 'critical' || risk === 'high'
     });
 }
 

@@ -147,11 +147,13 @@ Checks URLs against 95,000+ verified phishing/malware entries from live threat f
 | Attachment mentions | +12 | `.exe`, `.zip`, download links |
 
 ### Risk Levels
-| Score | Level | What It Means |
-|-------|-------|---------------|
-| 0–15 | 🟢 **Safe** | No meaningful threat indicators detected |
-| 16–40 | 🟡 **Suspicious** | Multiple weak signals or one strong heuristic signal — proceed with caution |
-| 41–100 | 🔴 **Dangerous** | Confirmed threat intelligence match or multiple strong indicators — do not interact |
+| Score | Level | Color | What It Means |
+|-------|-------|-------|---------------|
+| 0–10 | 🟢 **Safe** | Green | No indicators — clean |
+| 11–25 | 🔵 **Low Risk** | Blue | 1-2 weak signals — probably fine |
+| 26–50 | 🟡 **Medium Risk** | Yellow | Strong heuristic signal — be careful |
+| 51–75 | 🟠 **High Risk** | Orange | Multiple strong signals — likely threat |
+| 76–100 | 🔴 **Critical** | Red | Confirmed threat DB match — do NOT interact |
 
 ---
 

@@ -180,8 +180,9 @@ async function loadHistory() {
             item.className = 'history-item';
             item.onclick = () => viewReport(scan.id);
 
-            const badgeClass = scan.risk_level === 'good' ? 'badge-good' : scan.risk_level === 'average' ? 'badge-average' : 'badge-bad';
-            const scoreColor = scan.risk_level === 'good' ? 'var(--accent-green)' : scan.risk_level === 'average' ? 'var(--accent-orange)' : 'var(--danger)';
+            const badgeClass = `badge-${scan.risk_level || 'safe'}`;
+            const colorMap = { safe: 'var(--accent-green)', low: '#2196f3', medium: 'var(--accent-orange)', high: '#ff9800', critical: 'var(--danger)' };
+            const scoreColor = colorMap[scan.risk_level] || 'var(--accent-green)';
 
             const date = new Date(scan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
