@@ -117,22 +117,23 @@ phishing-detector/
 
 The scanner uses a **multi-layered approach**:
 
-### Layer 1: Threat Database Lookup (+40 points)
-Checks URLs against 95,000+ verified phishing/malware entries from live threat feeds.
+### Layer 1: Threat Database Lookup (+75 points)
+Checks URLs against 95,000+ verified phishing/malware entries from live threat feeds. A match here is a **confirmed threat**, not a heuristic guess.
 
-### Layer 2: Heuristic Analysis (0–60 points)
-| Check | Points | Description |
-|-------|--------|-------------|
-| IP-based URL | +25 | URL uses IP address instead of domain |
-| Typosquatting | +25 | Domain mimics PayPal, Amazon, Google, etc. |
-| No HTTPS | +15 | Missing SSL certificate |
-| Suspicious TLD | +15 | `.tk`, `.xyz`, `.top`, `.club`, etc. |
-| URL shortener | +15 | `bit.ly`, `tinyurl.com`, etc. |
-| Excessive subdomains | +12 | More than 2 subdomain levels |
-| Suspicious keywords | +5–20 | `login`, `verify`, `account`, etc. |
-| Special characters | +8 | Unusual characters in URL |
-| Long URL | +8 | Over 100 characters |
-| Known safe domain | -20 | Google, GitHub, Microsoft, etc. |
+### Layer 2: Heuristic Analysis (0–50 points)
+| Check | Points | Severity | Real-World Rationale |
+|-------|--------|----------|---------------------|
+| Brand Impersonation (Typosquatting) | +35 | High | Strongest heuristic — `paypa1.com` impersonating PayPal |
+| IP-based URL | +30 | High | Legit sites never use raw IPs (`192.168.1.1/login`) |
+| URL Credential Spoofing (`@`) | +20 | High | `http://google.com@evil.com` tricks browsers |
+| Excessive subdomains | +15 | Medium | `secure.login.banking.evil.com` |
+| High-risk TLD | +10 | Medium | `.tk`, `.xyz`, `.top` — disproportionate abuse rates |
+| URL shortener | +10 | Medium | `bit.ly` hides true destination |
+| Suspicious keywords | +3–15 | Low | "login", "verify" — weak alone, strong combined |
+| No HTTPS | +5 | Low | Weak — phishing sites use Let's Encrypt too |
+| Long URL (150+ chars) | +5 | Low | Can hide malicious params |
+| Code injection URL | +40 | Critical | `javascript:` or `data:` protocol |
+| Known safe domain | -30 | Safe | Google, GitHub, Microsoft, etc. |
 
 ### Layer 3: Email Content Analysis
 | Check | Points | Description |
@@ -146,11 +147,11 @@ Checks URLs against 95,000+ verified phishing/malware entries from live threat f
 | Attachment mentions | +12 | `.exe`, `.zip`, download links |
 
 ### Risk Levels
-| Score | Level | Action |
-|-------|-------|--------|
-| 0–20 | 🟢 **Safe** | No issues detected |
-| 21–50 | 🟡 **Caution** | Some suspicious indicators |
-| 51–100 | 🔴 **Dangerous** | Strong phishing indicators |
+| Score | Level | What It Means |
+|-------|-------|---------------|
+| 0–15 | 🟢 **Safe** | No meaningful threat indicators detected |
+| 16–40 | 🟡 **Suspicious** | Multiple weak signals or one strong heuristic signal — proceed with caution |
+| 41–100 | 🔴 **Dangerous** | Confirmed threat intelligence match or multiple strong indicators — do not interact |
 
 ---
 

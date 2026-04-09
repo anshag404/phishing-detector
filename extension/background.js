@@ -129,8 +129,8 @@ function scanURL(url) {
 }
 
 function getRiskLevel(score) {
-    if (score <= 20) return 'good';
-    if (score <= 50) return 'average';
+    if (score <= 15) return 'good';
+    if (score <= 40) return 'average';
     return 'bad';
 }
 

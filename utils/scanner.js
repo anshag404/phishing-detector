@@ -52,62 +52,62 @@ function scanURL(url) {
         const hostname = parsed.hostname.toLowerCase();
         const fullUrl = url.toLowerCase();
 
-        // 0. Check PhishTank database (highest priority)
+        // 0. Check Threat Intelligence database (highest priority — confirmed threat)
         const phishTankMatch = checkPhishTank(url);
         if (phishTankMatch) {
-            factors.push({ name: 'PhishTank Verified Threat', severity: 'high', points: 40, description: `This URL is listed in the PhishTank database as a verified phishing site (${phishTankMatch.matchType} match: ${phishTankMatch.target}).` });
-            score += 40;
+            factors.push({ name: 'Threat Intelligence Match', severity: 'critical', points: 75, description: `This URL is listed in verified threat databases as a known phishing/malware site (${phishTankMatch.matchType} match: ${phishTankMatch.target}). This is a confirmed threat, not a heuristic guess.` });
+            score += 75;
         }
 
         // Check if it's a known safe domain
         const isSafe = SAFE_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
         if (isSafe && !phishTankMatch) {
-            factors.push({ name: 'Known Safe Domain', severity: 'safe', points: -20, description: 'This domain is recognized as a legitimate, well-known website.' });
-            score -= 20;
+            factors.push({ name: 'Known Safe Domain', severity: 'safe', points: -30, description: 'This domain is recognized as a legitimate, well-known website with established trust.' });
+            score -= 30;
         }
 
-        // 1. Check for IP-based URL
+        // 1. Check for IP-based URL (very strong indicator — legit sites almost never do this)
         const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
         if (ipPattern.test(hostname)) {
-            factors.push({ name: 'IP-Based URL', severity: 'high', points: 25, description: 'URL uses an IP address instead of a domain name, commonly used in phishing attacks.' });
-            score += 25;
+            factors.push({ name: 'IP-Based URL', severity: 'high', points: 30, description: 'URL uses a raw IP address instead of a domain name. Legitimate websites almost never do this — it is a strong phishing/malware indicator.' });
+            score += 30;
         }
 
-        // 2. Check for HTTP (no SSL)
+        // 2. Check for HTTP (no SSL) — weak signal; many phishing sites now use HTTPS via Let's Encrypt
         if (parsed.protocol === 'http:') {
-            factors.push({ name: 'No SSL Certificate', severity: 'medium', points: 15, description: 'Website does not use HTTPS encryption. Legitimate sites typically use SSL certificates.' });
-            score += 15;
+            factors.push({ name: 'No HTTPS Encryption', severity: 'low', points: 5, description: 'Website does not use HTTPS. Note: many phishing sites DO use HTTPS, so this alone is a weak indicator.' });
+            score += 5;
         }
 
-        // 3. Check for suspicious TLDs
+        // 3. Check for suspicious TLDs — moderate signal
         const tld = '.' + hostname.split('.').pop();
         if (SUSPICIOUS_TLDS.includes(tld)) {
-            factors.push({ name: 'Suspicious Domain Extension', severity: 'medium', points: 15, description: `The domain uses "${tld}" which is frequently associated with phishing and spam websites.` });
-            score += 15;
+            factors.push({ name: 'High-Risk Domain Extension', severity: 'medium', points: 10, description: `The domain uses "${tld}" which has a disproportionately high rate of abuse in phishing and malware campaigns.` });
+            score += 10;
         }
 
-        // 4. Check for URL shorteners
+        // 4. Check for URL shorteners — moderate signal (legit use exists)
         if (URL_SHORTENERS.some(s => hostname.includes(s))) {
-            factors.push({ name: 'URL Shortener Detected', severity: 'medium', points: 15, description: 'URL shorteners can hide the true destination of a link, commonly used in phishing.' });
-            score += 15;
+            factors.push({ name: 'URL Shortener Detected', severity: 'medium', points: 10, description: 'URL shorteners mask the true destination. While used legitimately, they are also heavily abused in phishing campaigns.' });
+            score += 10;
         }
 
-        // 5. Check for excessive subdomains
+        // 5. Check for excessive subdomains — strong signal when combined with others
         const subdomainCount = hostname.split('.').length - 2;
         if (subdomainCount > 2) {
-            factors.push({ name: 'Excessive Subdomains', severity: 'medium', points: 12, description: `URL has ${subdomainCount} subdomains. Phishing sites often use many subdomains to appear legitimate.` });
-            score += 12;
+            factors.push({ name: 'Excessive Subdomains', severity: 'medium', points: 15, description: `URL has ${subdomainCount} subdomains (e.g. secure.login.banking.evil.com). This is a common phishing technique to make URLs look legitimate.` });
+            score += 15;
         }
 
-        // 6. Check for phishing keywords in URL
+        // 6. Check for phishing keywords in URL — weak signal alone (many legit URLs have "login")
         const foundKeywords = PHISHING_URL_KEYWORDS.filter(kw => fullUrl.includes(kw));
-        if (foundKeywords.length > 0) {
-            const pts = Math.min(foundKeywords.length * 5, 20);
-            factors.push({ name: 'Suspicious Keywords in URL', severity: foundKeywords.length > 2 ? 'high' : 'medium', points: pts, description: `URL contains suspicious keywords: ${foundKeywords.join(', ')}. These are commonly used in phishing URLs.` });
+        if (foundKeywords.length > 0 && !isSafe) {
+            const pts = Math.min(foundKeywords.length * 3, 15);
+            factors.push({ name: 'Suspicious Keywords in URL', severity: foundKeywords.length > 3 ? 'medium' : 'low', points: pts, description: `URL contains trigger words: ${foundKeywords.join(', ')}. Alone this is a weak signal, but combined with other factors it increases suspicion.` });
             score += pts;
         }
 
-        // 7. Check for typosquatting (character substitution)
+        // 7. Check for typosquatting (character substitution) — one of the strongest indicators
         const typoPatterns = [
             { pattern: /paypa[l1]/i, brand: 'PayPal' },
             { pattern: /amaz[o0]n/i, brand: 'Amazon' },
@@ -115,34 +115,36 @@ function scanURL(url) {
             { pattern: /faceb[o0]{2}k/i, brand: 'Facebook' },
             { pattern: /app[l1]e/i, brand: 'Apple' },
             { pattern: /micr[o0]s[o0]ft/i, brand: 'Microsoft' },
-            { pattern: /netf[l1]ix/i, brand: 'Netflix' }
+            { pattern: /netf[l1]ix/i, brand: 'Netflix' },
+            { pattern: /[1l]inkedin/i, brand: 'LinkedIn' },
+            { pattern: /dropb[o0]x/i, brand: 'Dropbox' },
+            { pattern: /wh[a4]ts[a4]pp/i, brand: 'WhatsApp' }
         ];
 
         for (const { pattern, brand } of typoPatterns) {
-            if (pattern.test(hostname) && !SAFE_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d))) {
-                factors.push({ name: 'Possible Typosquatting', severity: 'high', points: 25, description: `Domain appears to impersonate ${brand} using slight character variations — a classic phishing technique.` });
-                score += 25;
+            if (pattern.test(hostname) && !isSafe) {
+                factors.push({ name: 'Brand Impersonation (Typosquatting)', severity: 'high', points: 35, description: `Domain impersonates ${brand} using character substitution (e.g. "l" → "1", "o" → "0"). This is a classic and highly effective phishing technique.` });
+                score += 35;
                 break;
             }
         }
 
-        // 8. Check for special characters in URL
-        const specialChars = (fullUrl.match(/[@!#$%^&*()]/g) || []).length;
-        if (specialChars > 0) {
-            factors.push({ name: 'Special Characters in URL', severity: 'low', points: 8, description: 'URL contains unusual special characters that may be used to obfuscate the true destination.' });
-            score += 8;
+        // 8. Check for @ symbol in URL (credential spoofing: user@evil.com/fake-site)
+        if (fullUrl.includes('@') && !fullUrl.startsWith('mailto:')) {
+            factors.push({ name: 'URL Credential Spoofing', severity: 'high', points: 20, description: 'URL contains an "@" symbol, which can trick browsers into ignoring everything before it. This is a known phishing technique.' });
+            score += 20;
         }
 
-        // 9. Check URL length
-        if (fullUrl.length > 100) {
-            factors.push({ name: 'Unusually Long URL', severity: 'low', points: 8, description: 'Very long URLs can be used to hide suspicious parameters and redirect targets.' });
-            score += 8;
-        }
-
-        // 10. Check for double slashes in path
-        if (parsed.pathname.includes('//')) {
-            factors.push({ name: 'Double Slashes in Path', severity: 'low', points: 5, description: 'URL path contains double slashes which may indicate a redirect or obfuscation attempt.' });
+        // 9. Check URL length — weak signal
+        if (fullUrl.length > 150) {
+            factors.push({ name: 'Unusually Long URL', severity: 'low', points: 5, description: 'Extremely long URLs can hide malicious parameters in plain sight.' });
             score += 5;
+        }
+
+        // 10. Check for data: or javascript: in URL
+        if (fullUrl.startsWith('data:') || fullUrl.startsWith('javascript:')) {
+            factors.push({ name: 'Code Injection URL', severity: 'critical', points: 40, description: 'URL uses data: or javascript: protocol, which can execute arbitrary code. This is extremely dangerous.' });
+            score += 40;
         }
 
     } catch (e) {
@@ -291,9 +293,9 @@ function scanWebsite(domain) {
  * Get risk level based on score
  */
 function getRiskLevel(score) {
-    if (score <= 20) return 'good';
-    if (score <= 50) return 'average';
-    return 'bad';
+    if (score <= 15) return 'good';     // Clean — no meaningful indicators
+    if (score <= 40) return 'average';  // Suspicious — 2+ weak signals or 1 strong signal
+    return 'bad';                       // Dangerous — confirmed threat or multiple strong indicators
 }
 
 /**
