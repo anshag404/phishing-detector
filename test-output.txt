@@ -1,0 +1,77 @@
+﻿============================================================
+≡ƒ¢í∩╕Å  PhishGuard ΓÇö PhishTank Integration Test
+============================================================
+
+STEP 1: Loading PhishTank database...
+----------------------------------------
+[PhishTank] ≡ƒöä Fetching PhishTank database...
+[PhishTank] Fetching: http://data.phishtank.com/data/online-valid.json.gz...
+[PhishTank] HTTP 301 | Content-Type: unknown
+[PhishTank] Redirecting...
+[PhishTank] Fetching: https://data.phishtank.com/data/online-valid.json.gz...
+[PhishTank] HTTP 302 | Content-Type: text/html; charset=UTF-8
+[PhishTank] Redirecting...
+[PhishTank] Fetching: https://cdn.phishtank.com/datadumps/verified_online.json.gz?Expires=1775766330&S...
+[PhishTank] HTTP 200 | Content-Type: application/gzip
+[PhishTank] Downloaded 3038949 bytes
+[PhishTank] Detected gzip data, decompressing...
+[PhishTank] Decompressed to 32696391 bytes
+[PhishTank] Response: 32696391 chars
+[PhishTank] Γ£à Parsed 56657 active phishing entries from 56657 total
+[PhishTank] ≡ƒöì Sample entries:
+  1. allegrolokalnie.net-ogloszenie-nr-3423-smart.club
+  2. allegro.net-ogloszenie-nr-3423-smart.club
+  3. t.co/bc9bh6kscr
+  4. t.co
+  5. allegrolokalnie.pl-09593.click/oferta/xiaomi-15t-pro-malo-uzywany-idealny-stan-512gb
+  6. allegrolokalnie.pl-09593.click
+[PhishTank] ≡ƒÆ╛ Cached 53589 entries
+[PhishTank] Γ£à Database loaded: 53589 entries
+
+≡ƒôè PhishTank DB Stats:
+   Loaded:     true
+   Entries:    53589
+   Last Fetch: 2026-04-09T20:25:26.227Z
+   Cache Age:  0 minutes
+
+STEP 2: Testing hardcoded URLs with scanner...
+----------------------------------------
+
+≡ƒö┤ http://paypal-secure-login.tk/verify
+   Score: 75/100 | Risk: BAD
+   PhishTank Match: No
+   Factors: No SSL Certificate, Suspicious Domain Extension, Suspicious Keywords in URL, Possible Typosquatting
+
+ΓÜá∩╕Å http://account-verify.xyz/signin
+   Score: 45/100 | Risk: AVERAGE
+   PhishTank Match: No
+   Factors: No SSL Certificate, Suspicious Domain Extension, Suspicious Keywords in URL
+
+ΓÜá∩╕Å http://192.168.1.100/bankofamerica/login
+   Score: 45/100 | Risk: AVERAGE
+   PhishTank Match: No
+   Factors: IP-Based URL, No SSL Certificate, Suspicious Keywords in URL
+
+Γ£à https://google.com
+   Score: 0/100 | Risk: GOOD
+   PhishTank Match: No
+   Factors: Known Safe Domain, Suspicious Keywords in URL
+
+Γ£à https://github.com
+   Score: 0/100 | Risk: GOOD
+   PhishTank Match: No
+   Factors: Known Safe Domain
+
+STEP 3: Testing first 5 PhishTank DB entries through scanner...
+----------------------------------------
+≡ƒö┤ http://allegrolokalnie.net-ogloszenie-nr-3423-smart.club ΓåÆ Score: 70 | Risk: BAD
+≡ƒö┤ http://allegro.net-ogloszenie-nr-3423-smart.club ΓåÆ Score: 70 | Risk: BAD
+≡ƒö┤ http://t.co/bc9bh6kscr ΓåÆ Score: 70 | Risk: BAD
+≡ƒö┤ http://t.co ΓåÆ Score: 70 | Risk: BAD
+≡ƒö┤ http://allegrolokalnie.pl-09593.click/oferta/xiaomi-15t-pro-malo-uzywany-idealny-stan-512gb ΓåÆ Score: 55 | Risk: BAD
+
+≡ƒôê Detection Results: 5/5 flagged as threats
+
+============================================================
+Test complete!
+============================================================

@@ -33,6 +33,9 @@ const SAFE_DOMAINS = [
     'stackoverflow.com', 'reddit.com', 'netflix.com', 'instagram.com'
 ];
 
+// PhishTank integration
+const { checkPhishTank } = require('./phishtank');
+
 /**
  * Analyze a URL for phishing indicators
  */
@@ -49,9 +52,16 @@ function scanURL(url) {
         const hostname = parsed.hostname.toLowerCase();
         const fullUrl = url.toLowerCase();
 
+        // 0. Check PhishTank database (highest priority)
+        const phishTankMatch = checkPhishTank(url);
+        if (phishTankMatch) {
+            factors.push({ name: 'PhishTank Verified Threat', severity: 'high', points: 40, description: `This URL is listed in the PhishTank database as a verified phishing site (${phishTankMatch.matchType} match: ${phishTankMatch.target}).` });
+            score += 40;
+        }
+
         // Check if it's a known safe domain
         const isSafe = SAFE_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
-        if (isSafe) {
+        if (isSafe && !phishTankMatch) {
             factors.push({ name: 'Known Safe Domain', severity: 'safe', points: -20, description: 'This domain is recognized as a legitimate, well-known website.' });
             score -= 20;
         }

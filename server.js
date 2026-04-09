@@ -42,11 +42,21 @@ app.get('/report', (req, res) => {
 // Initialize database
 require('./database');
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`
   ╔══════════════════════════════════════════════╗
   ║   🛡️  Phishing Detection System             ║
   ║   Server running on http://localhost:${PORT}    ║
   ╚══════════════════════════════════════════════╝
   `);
+
+    // Load PhishTank database in the background
+    try {
+        const { loadPhishTankDB, getPhishTankStats } = require('./utils/phishtank');
+        await loadPhishTankDB();
+        const stats = getPhishTankStats();
+        console.log(`  📡 PhishTank DB: ${stats.entries} entries loaded`);
+    } catch (err) {
+        console.log(`  ⚠️ PhishTank DB failed to load: ${err.message}`);
+    }
 });
