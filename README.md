@@ -209,6 +209,6 @@ This project is licensed under the MIT License.
 
 ## 👤 Author
 
-**Ansh Agrawal** — [@anshag404](https://github.com/anshag404)
+**Ansh Agarwal** — [@anshag404](https://github.com/anshag404)
 
 ---
