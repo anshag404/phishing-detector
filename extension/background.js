@@ -222,10 +222,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             showThreatNotification(tab.url, result.score, risk);
         }
 
-        // Send result to content script
-        chrome.tabs.sendMessage(tabId, {
-            type: 'SCAN_RESULT', score: result.score, risk, factors: result.factors
-        }).catch(() => { });
+        // Send result to content script (banner) — only for medium+
+        if (risk === 'medium' || risk === 'high' || risk === 'critical') {
+            chrome.tabs.sendMessage(tabId, {
+                type: 'SCAN_RESULT', score: result.score, risk, factors: result.factors
+            }).catch(() => { });
+        }
     }
 });
 
